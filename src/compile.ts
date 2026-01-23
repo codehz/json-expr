@@ -26,7 +26,7 @@ export interface CompileOptions {
   /**
    * 是否启用短路求值
    * 为 &&, ||, ??, 和三元表达式生成控制流节点
-   * @default false
+   * @default true
    */
   shortCircuit?: boolean;
 }
@@ -62,7 +62,7 @@ export function compile<TResult>(
   variables: Record<string, Variable<z.ZodType>>,
   options: CompileOptions = {}
 ): CompiledData {
-  const { inline = true, shortCircuit = false } = options;
+  const { inline = true, shortCircuit = true } = options;
   // 创建编译上下文
   const context: CompileContext = {
     variableOrder: [],

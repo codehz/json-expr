@@ -169,7 +169,8 @@ const result = expr({ sum, x })("sum * x");
 - `expression` - 要编译的表达式
 - `variables` - 表达式中使用的所有变量映射
 - `options` - 编译选项（可选）
-  - `optimize?: boolean` - 是否进行优化（默认：false）
+  - `inline?: boolean` - 是否启用内联优化，将只被引用一次的子表达式内联到使用位置（默认：true）
+  - `shortCircuit?: boolean` - 是否启用短路求值，为 &&, ||, ??, 和三元表达式生成控制流节点（默认：true）
 
 **返回值：** CompiledData 数组
 
@@ -183,11 +184,15 @@ const product = expr({ x, y })("x * y");
 const result = expr({ sum, product })("sum + product");
 
 const compiled = compile(result, { x, y });
+// [["x", "y"], "($0+$1)", "($0*$1)", "$2+$3"]
+
+// 禁用内联优化
+const noInline = compile(result, { x, y }, { inline: false });
 // [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
 
-// 使用优化选项
-const optimized = compile(result, { x, y }, { optimize: true });
-// [["x", "y"], "($0+$1)+($0*$1)"]
+// 禁用短路求值
+const noShortCircuit = compile(result, { x, y }, { shortCircuit: false });
+// 生成的表达式将使用直接的运算符而非控制流节点
 ```
 
 ### `evaluate<TResult>(data: CompiledData, values: Record<string, unknown>): TResult`
