@@ -38,6 +38,7 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
+      "@typescript-eslint/no-empty-object-type": "off",
       "prettier/prettier": "error",
     },
   },
