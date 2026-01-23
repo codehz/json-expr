@@ -25,7 +25,7 @@ bun install @codehz/json-expr
 
 ```typescript
 import { z } from "zod";
-import { variable, expr, compile, evaluate } from "@codehz/json-expr";
+import { variable, expr, compile, evaluate, constant } from "@codehz/json-expr";
 
 // 定义类型化变量
 const x = variable(z.number());
@@ -92,6 +92,35 @@ const compiled = compile(result, { x, y });
 ```
 
 ## API 参考
+
+### `constant<T>(value: T): Expression<{}, T>`
+
+创建一个编译期常量表达式。这是 `expr({})(JSON.stringify(value))` 的快速路径，用于在表达式中嵌入静态值，避免在运行时传入或在多处重复编写。
+
+**参数：**
+
+- `value` - 要嵌入的常量值（必须是 JSON 可序列化的：string、number、boolean、null、数组或对象）
+
+**返回值：** Expression 对象
+
+**示例：**
+
+```typescript
+import { constant, expr, variable, compile, evaluate } from "@codehz/json-expr";
+import { z } from "zod";
+
+// 创建常量
+const PI = constant(3.14159);
+const config = constant({ maxRetries: 3, timeout: 5000 });
+
+// 在表达式中使用常量
+const radius = variable(z.number());
+const area = expr({ PI, radius })("PI * radius * radius");
+
+const compiled = compile(area, { radius });
+const result = evaluate(compiled, { radius: 2 });
+// => 12.56636
+```
 
 ### `variable<T>(schema: T): Variable<T>`
 
