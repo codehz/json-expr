@@ -1,18 +1,18 @@
-import type { Expression, Variable } from "./types"
-import type { ValidateExpression, InferExpressionResult } from "./type-parser"
+import type { InferExpressionResult, ValidateExpression } from "./type-parser";
+import type { Expression, Variable } from "./types";
 
 /**
  * 表达式上下文类型约束
  */
-type ExprContext = Record<string, Variable<any> | Expression<any, any>>
+type ExprContext = Record<string, Variable<any> | Expression<any, any>>;
 
 /**
  * 表达式错误类型
  */
 type ExprError<Msg extends string, Details = unknown> = {
-  readonly __error: Msg
-  readonly __details: Details
-}
+  readonly __error: Msg;
+  readonly __details: Details;
+};
 
 /**
  * 验证结果处理：如果验证失败返回错误类型，否则返回推导的结果类型
@@ -22,7 +22,7 @@ type ExprResult<Source extends string, TContext extends ExprContext> =
     ? InferExpressionResult<Source, TContext>
     : ValidateExpression<Source, TContext> extends { error: "undefined_identifiers"; identifiers: infer Ids }
       ? ExprError<"Undefined identifiers in expression", Ids>
-      : ExprError<"Expression validation failed", ValidateExpression<Source, TContext>>
+      : ExprError<"Expression validation failed", ValidateExpression<Source, TContext>>;
 
 /**
  * 创建一个表达式，支持编译时类型检查和返回类型自动推导
@@ -58,7 +58,7 @@ export function expr<TContext extends ExprContext>(
       _tag: "expression",
       context,
       source,
-      _type: undefined as any
-    } as Expression<TContext, ExprResult<Source, TContext>>
-  }
+      _type: undefined as any,
+    } as Expression<TContext, ExprResult<Source, TContext>>;
+  };
 }

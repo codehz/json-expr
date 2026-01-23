@@ -1,103 +1,103 @@
-import { test, expect } from "bun:test"
-import { z } from "zod"
-import { variable } from "./variable"
-import { expr } from "./expr"
-import { compile } from "./compile"
+import { expect, test } from "bun:test";
+import { z } from "zod";
+import { compile } from "./compile";
+import { expr } from "./expr";
+import { variable } from "./variable";
 
 test("compile: simple variable expression", () => {
-  const x = variable(z.number())
-  const y = variable(z.number())
+  const x = variable(z.number());
+  const y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y")
-  const result = compile(sum, { x, y })
+  const sum = expr({ x, y })("x + y");
+  const result = compile(sum, { x, y });
 
   // 预期结果：[["x", "y"], "$0+$1"]（通过 AST 规范化输出，无空格）
-  expect(result).toHaveLength(2)
-  expect(result[0]).toEqual(["x", "y"])
-  expect(result[1]).toBe("$0+$1")
-})
+  expect(result).toHaveLength(2);
+  expect(result[0]).toEqual(["x", "y"]);
+  expect(result[1]).toBe("$0+$1");
+});
 
 test("compile: nested expressions with inline optimization", () => {
-  const x = variable(z.number())
-  const y = variable(z.number())
+  const x = variable(z.number());
+  const y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y")
-  const product = expr({ x, y })("x * y")
-  const result = expr({ sum, product })("sum + product")
+  const sum = expr({ x, y })("x + y");
+  const product = expr({ x, y })("x * y");
+  const result = expr({ sum, product })("sum + product");
 
   // 默认开启内联优化
-  const compiled = compile(result, { x, y })
+  const compiled = compile(result, { x, y });
 
   // 内联优化后，只剩一个表达式
-  expect(compiled).toHaveLength(2)
-  expect(compiled[0]).toEqual(["x", "y"])
-  expect(compiled[1]).toBe("$0+$1+$0*$1")
-})
+  expect(compiled).toHaveLength(2);
+  expect(compiled[0]).toEqual(["x", "y"]);
+  expect(compiled[1]).toBe("$0+$1+$0*$1");
+});
 
 test("compile: nested expressions without inline", () => {
-  const x = variable(z.number())
-  const y = variable(z.number())
+  const x = variable(z.number());
+  const y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y")
-  const product = expr({ x, y })("x * y")
-  const result = expr({ sum, product })("sum + product")
+  const sum = expr({ x, y })("x + y");
+  const product = expr({ x, y })("x * y");
+  const result = expr({ sum, product })("sum + product");
 
   // 禁用内联优化
-  const compiled = compile(result, { x, y }, { inline: false })
+  const compiled = compile(result, { x, y }, { inline: false });
 
   // 预期：[["x", "y"], "$0+$1", "$0*$1", "$2+$3"]（规范化输出）
-  expect(compiled).toHaveLength(4)
-  expect(compiled[0]).toEqual(["x", "y"])
-  expect(compiled[1]).toBe("$0+$1")
-  expect(compiled[2]).toBe("$0*$1")
-  expect(compiled[3]).toBe("$2+$3")
-})
+  expect(compiled).toHaveLength(4);
+  expect(compiled[0]).toEqual(["x", "y"]);
+  expect(compiled[1]).toBe("$0+$1");
+  expect(compiled[2]).toBe("$0*$1");
+  expect(compiled[3]).toBe("$2+$3");
+});
 
 test("compile: expression with single variable", () => {
-  const x = variable(z.number())
+  const x = variable(z.number());
 
-  const double = expr({ x })("x * 2")
-  const result = compile(double, { x })
+  const double = expr({ x })("x * 2");
+  const result = compile(double, { x });
 
-  expect(result).toHaveLength(2)
-  expect(result[0]).toEqual(["x"])
-  expect(result[1]).toBe("$0*2")
-})
+  expect(result).toHaveLength(2);
+  expect(result[0]).toEqual(["x"]);
+  expect(result[1]).toBe("$0*2");
+});
 
 test("compile: complex placeholder replacement", () => {
-  const x = variable(z.number())
-  const xy = variable(z.number())
+  const x = variable(z.number());
+  const xy = variable(z.number());
 
   // xy 是较长的名称，通过 AST 解析可以正确区分
-  const expr1 = expr({ xy, x })("xy + x")
-  const result = compile(expr1, { xy, x })
+  const expr1 = expr({ xy, x })("xy + x");
+  const result = compile(expr1, { xy, x });
 
-  expect(result).toHaveLength(2)
-  expect(result[0]).toEqual(["xy", "x"])
+  expect(result).toHaveLength(2);
+  expect(result[0]).toEqual(["xy", "x"]);
   // xy 应该被替换为 $0，x 应该被替换为 $1
-  expect(result[1]).toBe("$0+$1")
-})
+  expect(result[1]).toBe("$0+$1");
+});
 
 test("compile: detects undefined variable reference", () => {
-  const x = variable(z.number())
-  const y = variable(z.number())
+  const x = variable(z.number());
+  const y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y + z")
+  const sum = expr({ x, y })("x + y + z");
 
   expect(() => {
-    compile(sum, { x, y })
-  }).toThrow()
-})
+    compile(sum, { x, y });
+  }).toThrow();
+});
 
 test("compile: variable order matches declaration", () => {
-  const a = variable(z.number())
-  const b = variable(z.number())
-  const c = variable(z.number())
+  const a = variable(z.number());
+  const b = variable(z.number());
+  const c = variable(z.number());
 
-  const expr1 = expr({ a, b, c })("a + b + c")
-  const result = compile(expr1, { a, b, c })
+  const expr1 = expr({ a, b, c })("a + b + c");
+  const result = compile(expr1, { a, b, c });
 
-  expect(result[0]).toEqual(["a", "b", "c"])
+  expect(result[0]).toEqual(["a", "b", "c"]);
   // 规范化输出: a+b+c -> $0+$1+$2
-  expect(result[1]).toBe("$0+$1+$2")
-})
+  expect(result[1]).toBe("$0+$1+$2");
+});

@@ -1,12 +1,5 @@
-import { z } from "zod"
-import type {
-  Expression,
-  Variable,
-  CompiledData,
-  ExprNode,
-  CompileContext
-} from "./types"
-import { parse, generate, collectIdentifiers, type ASTNode } from "./parser"
+import { collectIdentifiers, generate, parse, type ASTNode } from "./parser";
+import type { CompileContext, CompiledData, Expression, ExprNode, Variable } from "./types";
 
 /**
  * 编译选项
@@ -17,7 +10,7 @@ export interface CompileOptions {
    * 将只被引用一次的子表达式内联到使用位置
    * @default true
    */
-  inline?: boolean
+  inline?: boolean;
 }
 
 /**
@@ -46,68 +39,68 @@ export function compile<TResult>(
   variables: Record<string, Variable<any>>,
   options: CompileOptions = {}
 ): CompiledData {
-  const { inline = true } = options
+  const { inline = true } = options;
   // 创建编译上下文
   const context: CompileContext = {
     variableOrder: [],
     nodeToIndex: new Map(),
-    expressions: []
-  }
+    expressions: [],
+  };
 
   // 第一步：为每个表达式分配唯一 ID
-  const exprIdMap = new WeakMap<Expression<any, any>, symbol>()
+  const exprIdMap = new WeakMap<Expression<any, any>, symbol>();
   const getExprId = (expr: Expression<any, any>): symbol => {
     if (!exprIdMap.has(expr)) {
-      exprIdMap.set(expr, Symbol("expr"))
+      exprIdMap.set(expr, Symbol("expr"));
     }
-    return exprIdMap.get(expr)!
-  }
+    return exprIdMap.get(expr)!;
+  };
 
   // 为所有变量创建 node
-  const nodeMap = new Map<symbol, ExprNode>()
-  const variableNodes = new Map<string, ExprNode>()
-  const visited = new Set<symbol>()
-  const visiting = new Set<symbol>()
+  const nodeMap = new Map<symbol, ExprNode>();
+  const variableNodes = new Map<string, ExprNode>();
+  const visited = new Set<symbol>();
+  const visiting = new Set<symbol>();
 
   for (const [name, variable] of Object.entries(variables)) {
-    const id = Symbol(`var:${name}`)
+    const id = Symbol(`var:${name}`);
     const node: ExprNode = {
       id,
       tag: "variable",
-      schema: variable.schema
-    }
-    nodeMap.set(id, node)
-    variableNodes.set(name, node)
+      schema: variable.schema,
+    };
+    nodeMap.set(id, node);
+    variableNodes.set(name, node);
   }
 
   // 第二步：递归收集所有依赖的节点，并检测循环依赖
-  const exprNodes = new Map<symbol, ExprNode>()
+  const exprNodes = new Map<symbol, ExprNode>();
   const collectNodes = (expr: Expression<any, any>): ExprNode => {
-    const exprId = getExprId(expr)
+    const exprId = getExprId(expr);
 
     if (visited.has(exprId)) {
-      return nodeMap.get(exprId)!
+      return nodeMap.get(exprId)!;
     }
 
     if (visiting.has(exprId)) {
-      throw new Error("Circular dependency detected in expressions")
+      throw new Error("Circular dependency detected in expressions");
     }
 
-    visiting.add(exprId)
+    visiting.add(exprId);
 
-    const contextNodes: Record<string, ExprNode> = {}
+    const contextNodes: Record<string, ExprNode> = {};
 
     // 收集表达式上下文中的所有节点
     for (const [key, contextItem] of Object.entries(expr.context)) {
-      const item = contextItem as Variable<any> | Expression<any, any>
+      const item = contextItem as Variable<any> | Expression<any, any>;
       if (item._tag === "variable") {
-        const varNode = variableNodes.get(key)
+        const varNode = variableNodes.get(key);
         if (!varNode) {
-          throw new Error(`Undefined variable reference: ${key}`)
+          throw new Error(`Undefined variable reference: ${key}`);
         }
-        contextNodes[key] = varNode
+        contextNodes[key] = varNode;
       } else if (item._tag === "expression") {
-        contextNodes[key] = collectNodes(item as Expression<any, any>)
+        contextNodes[key] = collectNodes(item);
       }
     }
 
@@ -115,63 +108,63 @@ export function compile<TResult>(
       id: exprId,
       tag: "expression",
       context: contextNodes,
-      source: expr.source
-    }
+      source: expr.source,
+    };
 
-    nodeMap.set(exprId, node)
-    exprNodes.set(exprId, node)
-    visited.add(exprId)
-    visiting.delete(exprId)
+    nodeMap.set(exprId, node);
+    exprNodes.set(exprId, node);
+    visited.add(exprId);
+    visiting.delete(exprId);
 
-    return node
-  }
+    return node;
+  };
 
   // 收集根表达式的所有节点
-  const rootNode = collectNodes(expression)
+  const rootNode = collectNodes(expression);
 
   // 第三步：拓扑排序，确保依赖的节点在前
-  const sortedExprNodes: ExprNode[] = []
-  const exprVisited = new Set<symbol>()
+  const sortedExprNodes: ExprNode[] = [];
+  const exprVisited = new Set<symbol>();
 
   const topologicalSort = (node: ExprNode) => {
     if (exprVisited.has(node.id)) {
-      return
+      return;
     }
 
-    exprVisited.add(node.id)
+    exprVisited.add(node.id);
 
     if (node.tag === "expression" && node.context) {
       for (const contextNode of Object.values(node.context)) {
-        topologicalSort(contextNode)
+        topologicalSort(contextNode);
       }
     }
 
     if (node.tag === "expression") {
-      sortedExprNodes.push(node)
+      sortedExprNodes.push(node);
     }
-  }
+  };
 
-  topologicalSort(rootNode)
+  topologicalSort(rootNode);
 
   // 第四步：分配变量索引 0 ~ N-1
   for (const [name, varNode] of variableNodes.entries()) {
     if (!context.nodeToIndex.has(varNode.id)) {
-      context.nodeToIndex.set(varNode.id, context.variableOrder.length)
-      context.variableOrder.push(name)
+      context.nodeToIndex.set(varNode.id, context.variableOrder.length);
+      context.variableOrder.push(name);
     }
   }
 
   // 第五步：计算每个表达式节点的引用次数
-  const refCount = new Map<symbol, number>()
+  const refCount = new Map<symbol, number>();
   for (const exprNode of sortedExprNodes) {
-    refCount.set(exprNode.id, 0)
+    refCount.set(exprNode.id, 0);
   }
 
   for (const exprNode of sortedExprNodes) {
     if (exprNode.context) {
       for (const contextNode of Object.values(exprNode.context)) {
         if (contextNode.tag === "expression") {
-          refCount.set(contextNode.id, (refCount.get(contextNode.id) ?? 0) + 1)
+          refCount.set(contextNode.id, (refCount.get(contextNode.id) ?? 0) + 1);
         }
       }
     }
@@ -179,86 +172,83 @@ export function compile<TResult>(
 
   // 判断哪些表达式可以内联（只被引用一次且不是根节点）
   const canInline = (node: ExprNode): boolean => {
-    if (!inline) return false
-    if (node.id === rootNode.id) return false // 根节点不能内联
-    return (refCount.get(node.id) ?? 0) === 1
-  }
+    if (!inline) return false;
+    if (node.id === rootNode.id) return false; // 根节点不能内联
+    return (refCount.get(node.id) ?? 0) === 1;
+  };
 
   // 第六步：为所有不能内联的表达式分配索引
-  let exprIndex = 0
+  let exprIndex = 0;
   for (const exprNode of sortedExprNodes) {
     if (!canInline(exprNode)) {
-      const index = context.variableOrder.length + exprIndex
-      context.nodeToIndex.set(exprNode.id, index)
-      exprIndex++
+      const index = context.variableOrder.length + exprIndex;
+      context.nodeToIndex.set(exprNode.id, index);
+      exprIndex++;
     }
   }
 
   // 第七步：为每个表达式生成 AST，并根据内联选项处理
-  const nodeAstMap = new Map<symbol, ASTNode>()
+  const nodeAstMap = new Map<symbol, ASTNode>();
 
   // 为变量生成 AST（始终是 $N 标识符）
   for (const [, varNode] of variableNodes.entries()) {
-    const index = context.nodeToIndex.get(varNode.id)!
-    nodeAstMap.set(varNode.id, { type: "Identifier", name: `$${index}` })
+    const index = context.nodeToIndex.get(varNode.id)!;
+    nodeAstMap.set(varNode.id, { type: "Identifier", name: `$${index}` });
   }
 
   // 为每个表达式生成 AST（按拓扑顺序，确保依赖的节点已处理）
   for (const exprNode of sortedExprNodes) {
     if (!exprNode.context || !exprNode.source) {
-      throw new Error("Invalid expression node")
+      throw new Error("Invalid expression node");
     }
 
     // 检查表达式源码中是否引用了未定义的变量
-    const usedVariables = extractVariableNames(exprNode.source)
+    const usedVariables = extractVariableNames(exprNode.source);
     for (const varName of usedVariables) {
       if (!(varName in exprNode.context)) {
         throw new Error(
           `Undefined variable reference: ${varName} (available: ${Object.keys(exprNode.context).join(", ")})`
-        )
+        );
       }
     }
 
     // 解析表达式为 AST
-    const ast = parse(exprNode.source)
+    const ast = parse(exprNode.source);
 
     // 转换标识符：将上下文中的名称替换为对应的 AST 节点
     const transformed = inlineTransform(ast, (name) => {
-      const contextNode = exprNode.context![name]
-      if (!contextNode) return null
+      const contextNode = exprNode.context![name];
+      if (!contextNode) return null;
 
       if (contextNode.tag === "variable") {
         // 变量始终替换为 $N
-        return nodeAstMap.get(contextNode.id) ?? null
+        return nodeAstMap.get(contextNode.id) ?? null;
       } else {
         // 表达式节点：如果可内联，返回其 AST；否则返回 $N
         if (canInline(contextNode)) {
-          return nodeAstMap.get(contextNode.id) ?? null
+          return nodeAstMap.get(contextNode.id) ?? null;
         } else {
-          const index = context.nodeToIndex.get(contextNode.id)!
-          return { type: "Identifier", name: `$${index}` } as ASTNode
+          const index = context.nodeToIndex.get(contextNode.id)!;
+          return { type: "Identifier", name: `$${index}` } as ASTNode;
         }
       }
-    })
+    });
 
-    nodeAstMap.set(exprNode.id, transformed)
+    nodeAstMap.set(exprNode.id, transformed);
   }
 
   // 第八步：生成最终表达式列表（只包含不能内联的表达式）
   for (const exprNode of sortedExprNodes) {
     if (!canInline(exprNode)) {
-      const ast = nodeAstMap.get(exprNode.id)!
-      context.expressions.push(generate(ast))
+      const ast = nodeAstMap.get(exprNode.id)!;
+      context.expressions.push(generate(ast));
     }
   }
 
   // 第九步：组合结果
-  const result: CompiledData = [
-    context.variableOrder,
-    ...context.expressions
-  ]
+  const result: CompiledData = [context.variableOrder, ...context.expressions];
 
-  return result
+  return result;
 }
 
 /**
@@ -268,14 +258,11 @@ export function compile<TResult>(
  * @param getReplacementAst - 根据标识符名称返回替换的 AST 节点，返回 null 表示不替换
  * @returns 转换后的 AST 节点
  */
-function inlineTransform(
-  node: ASTNode,
-  getReplacementAst: (name: string) => ASTNode | null
-): ASTNode {
+function inlineTransform(node: ASTNode, getReplacementAst: (name: string) => ASTNode | null): ASTNode {
   switch (node.type) {
     case "Identifier": {
-      const replacement = getReplacementAst(node.name)
-      return replacement ?? node
+      const replacement = getReplacementAst(node.name);
+      return replacement ?? node;
     }
 
     case "BinaryExpr":
@@ -283,13 +270,13 @@ function inlineTransform(
         ...node,
         left: inlineTransform(node.left, getReplacementAst),
         right: inlineTransform(node.right, getReplacementAst),
-      }
+      };
 
     case "UnaryExpr":
       return {
         ...node,
         argument: inlineTransform(node.argument, getReplacementAst),
-      }
+      };
 
     case "ConditionalExpr":
       return {
@@ -297,48 +284,40 @@ function inlineTransform(
         test: inlineTransform(node.test, getReplacementAst),
         consequent: inlineTransform(node.consequent, getReplacementAst),
         alternate: inlineTransform(node.alternate, getReplacementAst),
-      }
+      };
 
     case "MemberExpr":
       return {
         ...node,
         object: inlineTransform(node.object, getReplacementAst),
-        property: node.computed
-          ? inlineTransform(node.property, getReplacementAst)
-          : node.property,
-      }
+        property: node.computed ? inlineTransform(node.property, getReplacementAst) : node.property,
+      };
 
     case "CallExpr":
       return {
         ...node,
         callee: inlineTransform(node.callee, getReplacementAst),
-        arguments: node.arguments.map((arg) =>
-          inlineTransform(arg, getReplacementAst)
-        ),
-      }
+        arguments: node.arguments.map((arg) => inlineTransform(arg, getReplacementAst)),
+      };
 
     case "ArrayExpr":
       return {
         ...node,
-        elements: node.elements.map((el) =>
-          inlineTransform(el, getReplacementAst)
-        ),
-      }
+        elements: node.elements.map((el) => inlineTransform(el, getReplacementAst)),
+      };
 
     case "ObjectExpr":
       return {
         ...node,
         properties: node.properties.map((prop) => ({
           ...prop,
-          key: prop.computed
-            ? inlineTransform(prop.key, getReplacementAst)
-            : prop.key,
+          key: prop.computed ? inlineTransform(prop.key, getReplacementAst) : prop.key,
           value: inlineTransform(prop.value, getReplacementAst),
         })),
-      }
+      };
 
     default:
-      return node
+      return node;
   }
 }
 
@@ -369,7 +348,7 @@ const ALLOWED_GLOBALS = new Set([
   "isFinite",
   "parseInt",
   "parseFloat",
-])
+]);
 
 /**
  * 从表达式源码中提取所有使用的变量名
@@ -386,8 +365,8 @@ const ALLOWED_GLOBALS = new Set([
  * ```
  */
 function extractVariableNames(source: string): string[] {
-  const ast = parse(source)
-  const identifiers = collectIdentifiers(ast)
+  const ast = parse(source);
+  const identifiers = collectIdentifiers(ast);
   // 过滤掉允许的全局对象
-  return Array.from(identifiers).filter(name => !ALLOWED_GLOBALS.has(name))
+  return Array.from(identifiers).filter((name) => !ALLOWED_GLOBALS.has(name));
 }

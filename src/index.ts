@@ -1,20 +1,24 @@
-export { variable } from "./variable"
-export { expr } from "./expr"
-export { compile, type CompileOptions } from "./compile"
-export { evaluate } from "./evaluate"
+export { compile, type CompileOptions } from "./compile";
+export { evaluate } from "./evaluate";
+export { expr } from "./expr";
+export { variable } from "./variable";
 
-export type { Variable, Expression, CompiledData, ExprNode, CompileContext } from "./types"
 export type {
-  InferVariableType,
+  CompileContext,
+  CompiledData,
+  ExprNode,
+  Expression,
   InferContextType,
-  InferExpressionType
-} from "./types"
+  InferExpressionType,
+  InferVariableType,
+  Variable,
+} from "./types";
 
 export type {
-  ValidateExpression,
-  InferExpressionResult,
+  ContextTypeMap,
   ExpressionType,
-  ParseExpression,
   ExtractType,
-  ContextTypeMap
-} from "./type-parser"
+  InferExpressionResult,
+  ParseExpression,
+  ValidateExpression,
+} from "./type-parser";

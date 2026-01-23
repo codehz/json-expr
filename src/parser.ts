@@ -16,85 +16,85 @@ export type ASTNode =
   | MemberExpr
   | CallExpr
   | ArrayExpr
-  | ObjectExpr
+  | ObjectExpr;
 
 export interface NumberLiteral {
-  type: "NumberLiteral"
-  value: number
-  raw: string
+  type: "NumberLiteral";
+  value: number;
+  raw: string;
 }
 
 export interface StringLiteral {
-  type: "StringLiteral"
-  value: string
-  quote: "'" | '"' | "`"
+  type: "StringLiteral";
+  value: string;
+  quote: "'" | '"' | "`";
 }
 
 export interface BooleanLiteral {
-  type: "BooleanLiteral"
-  value: boolean
+  type: "BooleanLiteral";
+  value: boolean;
 }
 
 export interface NullLiteral {
-  type: "NullLiteral"
+  type: "NullLiteral";
 }
 
 export interface Identifier {
-  type: "Identifier"
-  name: string
+  type: "Identifier";
+  name: string;
 }
 
 export interface BinaryExpr {
-  type: "BinaryExpr"
-  operator: string
-  left: ASTNode
-  right: ASTNode
+  type: "BinaryExpr";
+  operator: string;
+  left: ASTNode;
+  right: ASTNode;
 }
 
 export interface UnaryExpr {
-  type: "UnaryExpr"
-  operator: string
-  argument: ASTNode
-  prefix: boolean
+  type: "UnaryExpr";
+  operator: string;
+  argument: ASTNode;
+  prefix: boolean;
 }
 
 export interface ConditionalExpr {
-  type: "ConditionalExpr"
-  test: ASTNode
-  consequent: ASTNode
-  alternate: ASTNode
+  type: "ConditionalExpr";
+  test: ASTNode;
+  consequent: ASTNode;
+  alternate: ASTNode;
 }
 
 export interface MemberExpr {
-  type: "MemberExpr"
-  object: ASTNode
-  property: ASTNode
-  computed: boolean
-  optional: boolean
+  type: "MemberExpr";
+  object: ASTNode;
+  property: ASTNode;
+  computed: boolean;
+  optional: boolean;
 }
 
 export interface CallExpr {
-  type: "CallExpr"
-  callee: ASTNode
-  arguments: ASTNode[]
-  optional: boolean
+  type: "CallExpr";
+  callee: ASTNode;
+  arguments: ASTNode[];
+  optional: boolean;
 }
 
 export interface ArrayExpr {
-  type: "ArrayExpr"
-  elements: ASTNode[]
+  type: "ArrayExpr";
+  elements: ASTNode[];
 }
 
 export interface ObjectExpr {
-  type: "ObjectExpr"
-  properties: ObjectProperty[]
+  type: "ObjectExpr";
+  properties: ObjectProperty[];
 }
 
 export interface ObjectProperty {
-  key: ASTNode
-  value: ASTNode
-  computed: boolean
-  shorthand: boolean
+  key: ASTNode;
+  value: ASTNode;
+  computed: boolean;
+  shorthand: boolean;
 }
 
 // 运算符优先级（从低到高）
@@ -113,8 +113,8 @@ const PRECEDENCE: Record<string, number> = {
   ">": 7,
   "<=": 7,
   ">=": 7,
-  "in": 7,
-  "instanceof": 7,
+  in: 7,
+  instanceof: 7,
   "<<": 8,
   ">>": 8,
   ">>>": 8,
@@ -124,479 +124,477 @@ const PRECEDENCE: Record<string, number> = {
   "/": 10,
   "%": 10,
   "**": 11,
-}
+};
 
 // 右结合运算符
-const RIGHT_ASSOCIATIVE = new Set(["**"])
+const RIGHT_ASSOCIATIVE = new Set(["**"]);
 
 class Parser {
-  private pos = 0
-  private source: string
+  private pos = 0;
+  private source: string;
 
   constructor(source: string) {
-    this.source = source
+    this.source = source;
   }
 
   parse(): ASTNode {
-    this.skipWhitespace()
-    const node = this.parseExpression()
-    this.skipWhitespace()
+    this.skipWhitespace();
+    const node = this.parseExpression();
+    this.skipWhitespace();
     if (this.pos < this.source.length) {
-      throw new Error(`Unexpected token at position ${this.pos}: ${this.source.slice(this.pos, this.pos + 10)}`)
+      throw new Error(`Unexpected token at position ${this.pos}: ${this.source.slice(this.pos, this.pos + 10)}`);
     }
-    return node
+    return node;
   }
 
   private parseExpression(): ASTNode {
-    return this.parseConditional()
+    return this.parseConditional();
   }
 
   private parseConditional(): ASTNode {
-    let node = this.parseBinary(0)
+    let node = this.parseBinary(0);
 
-    this.skipWhitespace()
+    this.skipWhitespace();
     if (this.peek() === "?") {
-      this.advance()
-      this.skipWhitespace()
-      const consequent = this.parseExpression()
-      this.skipWhitespace()
-      this.expect(":")
-      this.skipWhitespace()
-      const alternate = this.parseExpression()
+      this.advance();
+      this.skipWhitespace();
+      const consequent = this.parseExpression();
+      this.skipWhitespace();
+      this.expect(":");
+      this.skipWhitespace();
+      const alternate = this.parseExpression();
       node = {
         type: "ConditionalExpr",
         test: node,
         consequent,
         alternate,
-      }
+      };
     }
 
-    return node
+    return node;
   }
 
   private parseBinary(minPrec: number): ASTNode {
-    let left = this.parseUnary()
+    let left = this.parseUnary();
 
     while (true) {
-      this.skipWhitespace()
-      const op = this.peekOperator()
+      this.skipWhitespace();
+      const op = this.peekOperator();
       if (!op || PRECEDENCE[op] === undefined || PRECEDENCE[op] < minPrec) {
-        break
+        break;
       }
 
-      this.pos += op.length
-      this.skipWhitespace()
+      this.pos += op.length;
+      this.skipWhitespace();
 
-      const nextMinPrec = RIGHT_ASSOCIATIVE.has(op)
-        ? PRECEDENCE[op]
-        : PRECEDENCE[op] + 1
+      const nextMinPrec = RIGHT_ASSOCIATIVE.has(op) ? PRECEDENCE[op] : PRECEDENCE[op] + 1;
 
-      const right = this.parseBinary(nextMinPrec)
+      const right = this.parseBinary(nextMinPrec);
 
       left = {
         type: "BinaryExpr",
         operator: op,
         left,
         right,
-      }
+      };
     }
 
-    return left
+    return left;
   }
 
   private parseUnary(): ASTNode {
-    this.skipWhitespace()
-    const ch = this.peek()
+    this.skipWhitespace();
+    const ch = this.peek();
 
     if (ch === "!" || ch === "~" || ch === "+" || ch === "-") {
       // 检查是否是一元运算符而非二元运算符
       if (ch === "+" || ch === "-") {
-        this.advance()
-        this.skipWhitespace()
-        const argument = this.parseUnary()
+        this.advance();
+        this.skipWhitespace();
+        const argument = this.parseUnary();
         return {
           type: "UnaryExpr",
           operator: ch,
           argument,
           prefix: true,
-        }
+        };
       }
-      this.advance()
-      this.skipWhitespace()
-      const argument = this.parseUnary()
+      this.advance();
+      this.skipWhitespace();
+      const argument = this.parseUnary();
       return {
         type: "UnaryExpr",
         operator: ch,
         argument,
         prefix: true,
-      }
+      };
     }
 
     if (this.matchKeyword("typeof")) {
-      this.skipWhitespace()
-      const argument = this.parseUnary()
+      this.skipWhitespace();
+      const argument = this.parseUnary();
       return {
         type: "UnaryExpr",
         operator: "typeof",
         argument,
         prefix: true,
-      }
+      };
     }
 
     if (this.matchKeyword("void")) {
-      this.skipWhitespace()
-      const argument = this.parseUnary()
+      this.skipWhitespace();
+      const argument = this.parseUnary();
       return {
         type: "UnaryExpr",
         operator: "void",
         argument,
         prefix: true,
-      }
+      };
     }
 
-    return this.parsePostfix()
+    return this.parsePostfix();
   }
 
   private parsePostfix(): ASTNode {
-    let node = this.parsePrimary()
+    let node = this.parsePrimary();
 
     while (true) {
-      this.skipWhitespace()
-      const ch = this.peek()
+      this.skipWhitespace();
+      const ch = this.peek();
 
       if (ch === ".") {
-        this.advance()
-        this.skipWhitespace()
-        const property = this.parseIdentifier()
+        this.advance();
+        this.skipWhitespace();
+        const property = this.parseIdentifier();
         node = {
           type: "MemberExpr",
           object: node,
           property,
           computed: false,
           optional: false,
-        }
+        };
       } else if (ch === "[") {
-        this.advance()
-        this.skipWhitespace()
-        const property = this.parseExpression()
-        this.skipWhitespace()
-        this.expect("]")
+        this.advance();
+        this.skipWhitespace();
+        const property = this.parseExpression();
+        this.skipWhitespace();
+        this.expect("]");
         node = {
           type: "MemberExpr",
           object: node,
           property,
           computed: true,
           optional: false,
-        }
+        };
       } else if (ch === "(") {
-        this.advance()
-        const args = this.parseArguments()
-        this.expect(")")
+        this.advance();
+        const args = this.parseArguments();
+        this.expect(")");
         node = {
           type: "CallExpr",
           callee: node,
           arguments: args,
           optional: false,
-        }
+        };
       } else if (ch === "?" && this.peekAt(1) === ".") {
-        this.advance()
-        this.advance()
-        this.skipWhitespace()
+        this.advance();
+        this.advance();
+        this.skipWhitespace();
         if (this.peek() === "[") {
-          this.advance()
-          this.skipWhitespace()
-          const property = this.parseExpression()
-          this.skipWhitespace()
-          this.expect("]")
+          this.advance();
+          this.skipWhitespace();
+          const property = this.parseExpression();
+          this.skipWhitespace();
+          this.expect("]");
           node = {
             type: "MemberExpr",
             object: node,
             property,
             computed: true,
             optional: true,
-          }
+          };
         } else if (this.peek() === "(") {
-          this.advance()
-          const args = this.parseArguments()
-          this.expect(")")
+          this.advance();
+          const args = this.parseArguments();
+          this.expect(")");
           node = {
             type: "CallExpr",
             callee: node,
             arguments: args,
             optional: true,
-          }
+          };
         } else {
-          const property = this.parseIdentifier()
+          const property = this.parseIdentifier();
           node = {
             type: "MemberExpr",
             object: node,
             property,
             computed: false,
             optional: true,
-          }
+          };
         }
       } else {
-        break
+        break;
       }
     }
 
-    return node
+    return node;
   }
 
   private parsePrimary(): ASTNode {
-    this.skipWhitespace()
-    const ch = this.peek()
+    this.skipWhitespace();
+    const ch = this.peek();
 
     // 数字
     if (this.isDigit(ch) || (ch === "." && this.isDigit(this.peekAt(1)))) {
-      return this.parseNumber()
+      return this.parseNumber();
     }
 
     // 字符串
     if (ch === '"' || ch === "'" || ch === "`") {
-      return this.parseString()
+      return this.parseString();
     }
 
     // 数组
     if (ch === "[") {
-      return this.parseArray()
+      return this.parseArray();
     }
 
     // 对象
     if (ch === "{") {
-      return this.parseObject()
+      return this.parseObject();
     }
 
     // 括号表达式
     if (ch === "(") {
-      this.advance()
-      this.skipWhitespace()
-      const expr = this.parseExpression()
-      this.skipWhitespace()
-      this.expect(")")
-      return expr
+      this.advance();
+      this.skipWhitespace();
+      const expr = this.parseExpression();
+      this.skipWhitespace();
+      this.expect(")");
+      return expr;
     }
 
     // 关键字字面量
     if (this.matchKeyword("true")) {
-      return { type: "BooleanLiteral", value: true }
+      return { type: "BooleanLiteral", value: true };
     }
     if (this.matchKeyword("false")) {
-      return { type: "BooleanLiteral", value: false }
+      return { type: "BooleanLiteral", value: false };
     }
     if (this.matchKeyword("null")) {
-      return { type: "NullLiteral" }
+      return { type: "NullLiteral" };
     }
     if (this.matchKeyword("undefined")) {
-      return { type: "Identifier", name: "undefined" }
+      return { type: "Identifier", name: "undefined" };
     }
 
     // 标识符
     if (this.isIdentifierStart(ch)) {
-      return this.parseIdentifier()
+      return this.parseIdentifier();
     }
 
-    throw new Error(`Unexpected character at position ${this.pos}: ${ch}`)
+    throw new Error(`Unexpected character at position ${this.pos}: ${ch}`);
   }
 
   private parseNumber(): NumberLiteral {
-    const start = this.pos
+    const start = this.pos;
 
     // 处理十六进制、八进制、二进制
     if (this.peek() === "0") {
-      const next = this.peekAt(1)?.toLowerCase()
+      const next = this.peekAt(1)?.toLowerCase();
       if (next === "x" || next === "o" || next === "b") {
-        this.advance()
-        this.advance()
+        this.advance();
+        this.advance();
         while (this.isHexDigit(this.peek())) {
-          this.advance()
+          this.advance();
         }
-        const raw = this.source.slice(start, this.pos)
+        const raw = this.source.slice(start, this.pos);
         return {
           type: "NumberLiteral",
           value: Number(raw),
           raw,
-        }
+        };
       }
     }
 
     // 整数部分
     while (this.isDigit(this.peek())) {
-      this.advance()
+      this.advance();
     }
 
     // 小数部分
     if (this.peek() === "." && this.isDigit(this.peekAt(1))) {
-      this.advance()
+      this.advance();
       while (this.isDigit(this.peek())) {
-        this.advance()
+        this.advance();
       }
     }
 
     // 指数部分
     if (this.peek()?.toLowerCase() === "e") {
-      this.advance()
+      this.advance();
       if (this.peek() === "+" || this.peek() === "-") {
-        this.advance()
+        this.advance();
       }
       while (this.isDigit(this.peek())) {
-        this.advance()
+        this.advance();
       }
     }
 
-    const raw = this.source.slice(start, this.pos)
+    const raw = this.source.slice(start, this.pos);
     return {
       type: "NumberLiteral",
       value: Number(raw),
       raw,
-    }
+    };
   }
 
   private parseString(): StringLiteral {
-    const quote = this.peek() as "'" | '"' | "`"
-    this.advance()
+    const quote = this.peek() as "'" | '"' | "`";
+    this.advance();
 
-    let value = ""
+    let value = "";
     while (this.pos < this.source.length && this.peek() !== quote) {
       if (this.peek() === "\\") {
-        this.advance()
-        const escaped = this.peek()
+        this.advance();
+        const escaped = this.peek();
         switch (escaped) {
           case "n":
-            value += "\n"
-            break
+            value += "\n";
+            break;
           case "r":
-            value += "\r"
-            break
+            value += "\r";
+            break;
           case "t":
-            value += "\t"
-            break
+            value += "\t";
+            break;
           case "\\":
-            value += "\\"
-            break
+            value += "\\";
+            break;
           case "'":
-            value += "'"
-            break
+            value += "'";
+            break;
           case '"':
-            value += '"'
-            break
+            value += '"';
+            break;
           case "`":
-            value += "`"
-            break
+            value += "`";
+            break;
           default:
-            value += escaped
+            value += escaped;
         }
-        this.advance()
+        this.advance();
       } else {
-        value += this.peek()
-        this.advance()
+        value += this.peek();
+        this.advance();
       }
     }
 
-    this.expect(quote)
-    return { type: "StringLiteral", value, quote }
+    this.expect(quote);
+    return { type: "StringLiteral", value, quote };
   }
 
   private parseArray(): ArrayExpr {
-    this.expect("[")
-    const elements: ASTNode[] = []
+    this.expect("[");
+    const elements: ASTNode[] = [];
 
-    this.skipWhitespace()
+    this.skipWhitespace();
     while (this.peek() !== "]") {
-      elements.push(this.parseExpression())
-      this.skipWhitespace()
+      elements.push(this.parseExpression());
+      this.skipWhitespace();
       if (this.peek() === ",") {
-        this.advance()
-        this.skipWhitespace()
+        this.advance();
+        this.skipWhitespace();
       } else {
-        break
+        break;
       }
     }
 
-    this.expect("]")
-    return { type: "ArrayExpr", elements }
+    this.expect("]");
+    return { type: "ArrayExpr", elements };
   }
 
   private parseObject(): ObjectExpr {
-    this.expect("{")
-    const properties: ObjectProperty[] = []
+    this.expect("{");
+    const properties: ObjectProperty[] = [];
 
-    this.skipWhitespace()
+    this.skipWhitespace();
     while (this.peek() !== "}") {
-      const prop = this.parseObjectProperty()
-      properties.push(prop)
-      this.skipWhitespace()
+      const prop = this.parseObjectProperty();
+      properties.push(prop);
+      this.skipWhitespace();
       if (this.peek() === ",") {
-        this.advance()
-        this.skipWhitespace()
+        this.advance();
+        this.skipWhitespace();
       } else {
-        break
+        break;
       }
     }
 
-    this.expect("}")
-    return { type: "ObjectExpr", properties }
+    this.expect("}");
+    return { type: "ObjectExpr", properties };
   }
 
   private parseObjectProperty(): ObjectProperty {
-    this.skipWhitespace()
-    let key: ASTNode
-    let computed = false
+    this.skipWhitespace();
+    let key: ASTNode;
+    let computed = false;
 
     if (this.peek() === "[") {
-      this.advance()
-      this.skipWhitespace()
-      key = this.parseExpression()
-      this.skipWhitespace()
-      this.expect("]")
-      computed = true
+      this.advance();
+      this.skipWhitespace();
+      key = this.parseExpression();
+      this.skipWhitespace();
+      this.expect("]");
+      computed = true;
     } else if (this.peek() === '"' || this.peek() === "'") {
-      key = this.parseString()
+      key = this.parseString();
     } else {
-      key = this.parseIdentifier()
+      key = this.parseIdentifier();
     }
 
-    this.skipWhitespace()
+    this.skipWhitespace();
     if (this.peek() === ":") {
-      this.advance()
-      this.skipWhitespace()
-      const value = this.parseExpression()
-      return { key, value, computed, shorthand: false }
+      this.advance();
+      this.skipWhitespace();
+      const value = this.parseExpression();
+      return { key, value, computed, shorthand: false };
     }
 
     // Shorthand property
     if (key.type !== "Identifier") {
-      throw new Error("Shorthand property must be an identifier")
+      throw new Error("Shorthand property must be an identifier");
     }
-    return { key, value: key, computed: false, shorthand: true }
+    return { key, value: key, computed: false, shorthand: true };
   }
 
   private parseIdentifier(): Identifier {
-    const start = this.pos
+    const start = this.pos;
     while (this.isIdentifierPart(this.peek())) {
-      this.advance()
+      this.advance();
     }
-    const name = this.source.slice(start, this.pos)
+    const name = this.source.slice(start, this.pos);
     if (!name) {
-      throw new Error(`Expected identifier at position ${this.pos}`)
+      throw new Error(`Expected identifier at position ${this.pos}`);
     }
-    return { type: "Identifier", name }
+    return { type: "Identifier", name };
   }
 
   private parseArguments(): ASTNode[] {
-    const args: ASTNode[] = []
-    this.skipWhitespace()
+    const args: ASTNode[] = [];
+    this.skipWhitespace();
     while (this.peek() !== ")") {
-      args.push(this.parseExpression())
-      this.skipWhitespace()
+      args.push(this.parseExpression());
+      this.skipWhitespace();
       if (this.peek() === ",") {
-        this.advance()
-        this.skipWhitespace()
+        this.advance();
+        this.skipWhitespace();
       } else {
-        break
+        break;
       }
     }
-    return args
+    return args;
   }
 
   private peekOperator(): string | null {
@@ -627,73 +625,73 @@ class Parser {
       "&",
       "|",
       "^",
-    ]
+    ];
 
     for (const op of ops) {
       if (this.source.startsWith(op, this.pos)) {
         // 对于 "in" 和 "instanceof"，确保后面不是标识符字符
         if (op === "in" || op === "instanceof") {
-          const nextChar = this.source[this.pos + op.length]
+          const nextChar = this.source[this.pos + op.length];
           if (nextChar && this.isIdentifierPart(nextChar)) {
-            continue
+            continue;
           }
         }
-        return op
+        return op;
       }
     }
-    return null
+    return null;
   }
 
   private matchKeyword(keyword: string): boolean {
     if (this.source.startsWith(keyword, this.pos)) {
-      const nextChar = this.source[this.pos + keyword.length]
+      const nextChar = this.source[this.pos + keyword.length];
       if (!nextChar || !this.isIdentifierPart(nextChar)) {
-        this.pos += keyword.length
-        return true
+        this.pos += keyword.length;
+        return true;
       }
     }
-    return false
+    return false;
   }
 
   private peek(): string {
-    return this.source[this.pos] || ""
+    return this.source[this.pos] || "";
   }
 
   private peekAt(offset: number): string {
-    return this.source[this.pos + offset] || ""
+    return this.source[this.pos + offset] || "";
   }
 
   private advance(): string {
-    return this.source[this.pos++] || ""
+    return this.source[this.pos++] || "";
   }
 
   private expect(ch: string): void {
     if (this.peek() !== ch) {
-      throw new Error(`Expected '${ch}' at position ${this.pos}, got '${this.peek()}'`)
+      throw new Error(`Expected '${ch}' at position ${this.pos}, got '${this.peek()}'`);
     }
-    this.advance()
+    this.advance();
   }
 
   private skipWhitespace(): void {
     while (/\s/.test(this.peek())) {
-      this.advance()
+      this.advance();
     }
   }
 
   private isDigit(ch: string): boolean {
-    return /[0-9]/.test(ch)
+    return /[0-9]/.test(ch);
   }
 
   private isHexDigit(ch: string): boolean {
-    return /[0-9a-fA-F]/.test(ch)
+    return /[0-9a-fA-F]/.test(ch);
   }
 
   private isIdentifierStart(ch: string): boolean {
-    return /[a-zA-Z_$]/.test(ch)
+    return /[a-zA-Z_$]/.test(ch);
   }
 
   private isIdentifierPart(ch: string): boolean {
-    return /[a-zA-Z0-9_$]/.test(ch)
+    return /[a-zA-Z0-9_$]/.test(ch);
   }
 }
 
@@ -701,7 +699,7 @@ class Parser {
  * 解析 JavaScript 表达式为 AST
  */
 export function parse(source: string): ASTNode {
-  return new Parser(source).parse()
+  return new Parser(source).parse();
 }
 
 /**
@@ -710,85 +708,77 @@ export function parse(source: string): ASTNode {
 export function generate(node: ASTNode): string {
   switch (node.type) {
     case "NumberLiteral":
-      return node.raw
+      return node.raw;
 
     case "StringLiteral":
       // 使用双引号，转义必要的字符
-      return JSON.stringify(node.value)
+      return JSON.stringify(node.value);
 
     case "BooleanLiteral":
-      return node.value ? "true" : "false"
+      return node.value ? "true" : "false";
 
     case "NullLiteral":
-      return "null"
+      return "null";
 
     case "Identifier":
-      return node.name
+      return node.name;
 
     case "BinaryExpr": {
-      const left = wrapIfNeeded(node.left, node, "left")
-      const right = wrapIfNeeded(node.right, node, "right")
-      return `${left}${node.operator}${right}`
+      const left = wrapIfNeeded(node.left, node, "left");
+      const right = wrapIfNeeded(node.right, node, "right");
+      return `${left}${node.operator}${right}`;
     }
 
     case "UnaryExpr":
       if (node.prefix) {
-        const arg = wrapIfNeeded(node.argument, node, "argument")
+        const arg = wrapIfNeeded(node.argument, node, "argument");
         // 对于关键字运算符（typeof, void）需要空格
         if (node.operator === "typeof" || node.operator === "void") {
-          return `${node.operator} ${arg}`
+          return `${node.operator} ${arg}`;
         }
-        return `${node.operator}${arg}`
+        return `${node.operator}${arg}`;
       }
-      return generate(node.argument) + node.operator
+      return generate(node.argument) + node.operator;
 
     case "ConditionalExpr": {
-      const test = generate(node.test)
-      const consequent = generate(node.consequent)
-      const alternate = generate(node.alternate)
-      return `${test}?${consequent}:${alternate}`
+      const test = generate(node.test);
+      const consequent = generate(node.consequent);
+      const alternate = generate(node.alternate);
+      return `${test}?${consequent}:${alternate}`;
     }
 
     case "MemberExpr": {
-      const object = wrapIfNeeded(node.object, node, "object")
+      const object = wrapIfNeeded(node.object, node, "object");
       if (node.computed) {
-        const property = generate(node.property)
-        return node.optional
-          ? `${object}?.[${property}]`
-          : `${object}[${property}]`
+        const property = generate(node.property);
+        return node.optional ? `${object}?.[${property}]` : `${object}[${property}]`;
       }
-      const property = generate(node.property)
-      return node.optional
-        ? `${object}?.${property}`
-        : `${object}.${property}`
+      const property = generate(node.property);
+      return node.optional ? `${object}?.${property}` : `${object}.${property}`;
     }
 
     case "CallExpr": {
-      const callee = wrapIfNeeded(node.callee, node, "callee")
-      const args = node.arguments.map(generate).join(",")
-      return node.optional
-        ? `${callee}?.(${args})`
-        : `${callee}(${args})`
+      const callee = wrapIfNeeded(node.callee, node, "callee");
+      const args = node.arguments.map(generate).join(",");
+      return node.optional ? `${callee}?.(${args})` : `${callee}(${args})`;
     }
 
     case "ArrayExpr":
-      return `[${node.elements.map(generate).join(",")}]`
+      return `[${node.elements.map(generate).join(",")}]`;
 
     case "ObjectExpr": {
       const props = node.properties.map((prop) => {
         if (prop.shorthand) {
-          return generate(prop.key)
+          return generate(prop.key);
         }
-        const key = prop.computed
-          ? `[${generate(prop.key)}]`
-          : generate(prop.key)
-        return `${key}:${generate(prop.value)}`
-      })
-      return `{${props.join(",")}}`
+        const key = prop.computed ? `[${generate(prop.key)}]` : generate(prop.key);
+        return `${key}:${generate(prop.value)}`;
+      });
+      return `{${props.join(",")}}`;
     }
 
     default:
-      throw new Error(`Unknown node type: ${(node as any).type}`)
+      throw new Error(`Unknown node type: ${(node as any).type}`);
   }
 }
 
@@ -800,40 +790,36 @@ function wrapIfNeeded(
   parent: ASTNode,
   position: "left" | "right" | "argument" | "object" | "callee"
 ): string {
-  const code = generate(child)
+  const code = generate(child);
 
   if (needsParens(child, parent, position)) {
-    return `(${code})`
+    return `(${code})`;
   }
-  return code
+  return code;
 }
 
 /**
  * 判断子节点是否需要括号
  */
-function needsParens(
-  child: ASTNode,
-  parent: ASTNode,
-  position: string
-): boolean {
+function needsParens(child: ASTNode, parent: ASTNode, position: string): boolean {
   // 条件表达式在二元表达式中需要括号
   if (child.type === "ConditionalExpr" && parent.type === "BinaryExpr") {
-    return true
+    return true;
   }
 
   // 二元表达式嵌套时根据优先级判断
   if (child.type === "BinaryExpr" && parent.type === "BinaryExpr") {
-    const childPrec = PRECEDENCE[child.operator] || 0
-    const parentPrec = PRECEDENCE[parent.operator] || 0
+    const childPrec = PRECEDENCE[child.operator] || 0;
+    const parentPrec = PRECEDENCE[parent.operator] || 0;
 
     if (childPrec < parentPrec) {
-      return true
+      return true;
     }
 
     // 相同优先级时，右侧需要括号（除了右结合运算符）
     if (childPrec === parentPrec && position === "right") {
       if (!RIGHT_ASSOCIATIVE.has(parent.operator)) {
-        return true
+        return true;
       }
     }
   }
@@ -841,36 +827,33 @@ function needsParens(
   // 一元表达式作为二元表达式右侧且运算符是 ** 时需要括号
   if (child.type === "UnaryExpr" && parent.type === "BinaryExpr") {
     if (parent.operator === "**" && position === "left") {
-      return true
+      return true;
     }
   }
 
-  return false
+  return false;
 }
 
 /**
  * 转换 AST 中的标识符
  */
-export function transformIdentifiers(
-  node: ASTNode,
-  transform: (name: string) => string
-): ASTNode {
+export function transformIdentifiers(node: ASTNode, transform: (name: string) => string): ASTNode {
   switch (node.type) {
     case "Identifier":
-      return { ...node, name: transform(node.name) }
+      return { ...node, name: transform(node.name) };
 
     case "BinaryExpr":
       return {
         ...node,
         left: transformIdentifiers(node.left, transform),
         right: transformIdentifiers(node.right, transform),
-      }
+      };
 
     case "UnaryExpr":
       return {
         ...node,
         argument: transformIdentifiers(node.argument, transform),
-      }
+      };
 
     case "ConditionalExpr":
       return {
@@ -878,49 +861,41 @@ export function transformIdentifiers(
         test: transformIdentifiers(node.test, transform),
         consequent: transformIdentifiers(node.consequent, transform),
         alternate: transformIdentifiers(node.alternate, transform),
-      }
+      };
 
     case "MemberExpr":
       return {
         ...node,
         object: transformIdentifiers(node.object, transform),
         // 只有 computed 属性需要转换
-        property: node.computed
-          ? transformIdentifiers(node.property, transform)
-          : node.property,
-      }
+        property: node.computed ? transformIdentifiers(node.property, transform) : node.property,
+      };
 
     case "CallExpr":
       return {
         ...node,
         callee: transformIdentifiers(node.callee, transform),
-        arguments: node.arguments.map((arg) =>
-          transformIdentifiers(arg, transform)
-        ),
-      }
+        arguments: node.arguments.map((arg) => transformIdentifiers(arg, transform)),
+      };
 
     case "ArrayExpr":
       return {
         ...node,
-        elements: node.elements.map((el) =>
-          transformIdentifiers(el, transform)
-        ),
-      }
+        elements: node.elements.map((el) => transformIdentifiers(el, transform)),
+      };
 
     case "ObjectExpr":
       return {
         ...node,
         properties: node.properties.map((prop) => ({
           ...prop,
-          key: prop.computed
-            ? transformIdentifiers(prop.key, transform)
-            : prop.key,
+          key: prop.computed ? transformIdentifiers(prop.key, transform) : prop.key,
           value: transformIdentifiers(prop.value, transform),
         })),
-      }
+      };
 
     default:
-      return node
+      return node;
   }
 }
 
@@ -928,56 +903,56 @@ export function transformIdentifiers(
  * 收集 AST 中所有使用的标识符名称
  */
 export function collectIdentifiers(node: ASTNode): Set<string> {
-  const identifiers = new Set<string>()
+  const identifiers = new Set<string>();
 
   function visit(n: ASTNode): void {
     switch (n.type) {
       case "Identifier":
-        identifiers.add(n.name)
-        break
+        identifiers.add(n.name);
+        break;
 
       case "BinaryExpr":
-        visit(n.left)
-        visit(n.right)
-        break
+        visit(n.left);
+        visit(n.right);
+        break;
 
       case "UnaryExpr":
-        visit(n.argument)
-        break
+        visit(n.argument);
+        break;
 
       case "ConditionalExpr":
-        visit(n.test)
-        visit(n.consequent)
-        visit(n.alternate)
-        break
+        visit(n.test);
+        visit(n.consequent);
+        visit(n.alternate);
+        break;
 
       case "MemberExpr":
-        visit(n.object)
+        visit(n.object);
         if (n.computed) {
-          visit(n.property)
+          visit(n.property);
         }
-        break
+        break;
 
       case "CallExpr":
-        visit(n.callee)
-        n.arguments.forEach(visit)
-        break
+        visit(n.callee);
+        n.arguments.forEach(visit);
+        break;
 
       case "ArrayExpr":
-        n.elements.forEach(visit)
-        break
+        n.elements.forEach(visit);
+        break;
 
       case "ObjectExpr":
         n.properties.forEach((prop) => {
           if (prop.computed) {
-            visit(prop.key)
+            visit(prop.key);
           }
-          visit(prop.value)
-        })
-        break
+          visit(prop.value);
+        });
+        break;
     }
   }
 
-  visit(node)
-  return identifiers
+  visit(node);
+  return identifiers;
 }
