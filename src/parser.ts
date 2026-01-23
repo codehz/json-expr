@@ -206,38 +206,29 @@ class Parser {
     this.skipWhitespace();
     const ch = this.peek();
 
+    // Single-character unary operators
     if (ch === "!" || ch === "~" || ch === "+" || ch === "-") {
       this.advance();
       this.skipWhitespace();
-      const argument = this.parseUnary();
       return {
         type: "UnaryExpr",
         operator: ch,
-        argument,
+        argument: this.parseUnary(),
         prefix: true,
       };
     }
 
-    if (this.matchKeyword("typeof")) {
-      this.skipWhitespace();
-      const argument = this.parseUnary();
-      return {
-        type: "UnaryExpr",
-        operator: "typeof",
-        argument,
-        prefix: true,
-      };
-    }
-
-    if (this.matchKeyword("void")) {
-      this.skipWhitespace();
-      const argument = this.parseUnary();
-      return {
-        type: "UnaryExpr",
-        operator: "void",
-        argument,
-        prefix: true,
-      };
+    // Keyword unary operators
+    for (const keyword of ["typeof", "void"] as const) {
+      if (this.matchKeyword(keyword)) {
+        this.skipWhitespace();
+        return {
+          type: "UnaryExpr",
+          operator: keyword,
+          argument: this.parseUnary(),
+          prefix: true,
+        };
+      }
     }
 
     return this.parsePostfix();
@@ -438,6 +429,16 @@ class Parser {
     };
   }
 
+  private static readonly ESCAPE_CHARS: Record<string, string> = {
+    n: "\n",
+    r: "\r",
+    t: "\t",
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "`": "`",
+  };
+
   private parseString(): StringLiteral {
     const quote = this.peek() as "'" | '"' | "`";
     this.advance();
@@ -447,31 +448,7 @@ class Parser {
       if (this.peek() === "\\") {
         this.advance();
         const escaped = this.peek();
-        switch (escaped) {
-          case "n":
-            value += "\n";
-            break;
-          case "r":
-            value += "\r";
-            break;
-          case "t":
-            value += "\t";
-            break;
-          case "\\":
-            value += "\\";
-            break;
-          case "'":
-            value += "'";
-            break;
-          case '"':
-            value += '"';
-            break;
-          case "`":
-            value += "`";
-            break;
-          default:
-            value += escaped;
-        }
+        value += Parser.ESCAPE_CHARS[escaped] ?? escaped;
         this.advance();
       } else {
         value += this.peek();
@@ -585,47 +562,52 @@ class Parser {
     return args;
   }
 
-  private peekOperator(): string | null {
-    // 按长度排序，先匹配长的运算符
-    const ops = [
-      ">>>",
-      "===",
-      "!==",
-      "instanceof",
-      "&&",
-      "||",
-      "??",
-      "==",
-      "!=",
-      "<=",
-      ">=",
-      "<<",
-      ">>",
-      "**",
-      "in",
-      "+",
-      "-",
-      "*",
-      "/",
-      "%",
-      "<",
-      ">",
-      "&",
-      "|",
-      "^",
-    ];
+  // Operators sorted by length (longest first) to ensure correct matching
+  private static readonly OPERATORS = [
+    // 10 chars
+    "instanceof",
+    // 3 chars
+    ">>>",
+    "===",
+    "!==",
+    // 2 chars
+    "&&",
+    "||",
+    "??",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "<<",
+    ">>",
+    "**",
+    "in",
+    // 1 char
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "<",
+    ">",
+    "&",
+    "|",
+    "^",
+  ];
 
-    for (const op of ops) {
-      if (this.source.startsWith(op, this.pos)) {
-        // 对于 "in" 和 "instanceof"，确保后面不是标识符字符
-        if (op === "in" || op === "instanceof") {
-          const nextChar = this.source[this.pos + op.length];
-          if (nextChar && this.isIdentifierPart(nextChar)) {
-            continue;
-          }
-        }
-        return op;
+  private static readonly KEYWORD_OPERATORS = new Set(["in", "instanceof"]);
+
+  private peekOperator(): string | null {
+    for (const op of Parser.OPERATORS) {
+      if (!this.source.startsWith(op, this.pos)) continue;
+
+      // Keyword operators must not be followed by identifier characters
+      if (Parser.KEYWORD_OPERATORS.has(op)) {
+        const nextChar = this.source[this.pos + op.length];
+        if (nextChar && this.isIdentifierPart(nextChar)) continue;
       }
+
+      return op;
     }
     return null;
   }
@@ -667,19 +649,29 @@ class Parser {
   }
 
   private isDigit(ch: string): boolean {
-    return /[0-9]/.test(ch);
+    const code = ch.charCodeAt(0);
+    return code >= 48 && code <= 57; // 0-9
   }
 
   private isHexDigit(ch: string): boolean {
-    return /[0-9a-fA-F]/.test(ch);
+    const code = ch.charCodeAt(0);
+    return (code >= 48 && code <= 57) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102);
   }
 
   private isIdentifierStart(ch: string): boolean {
-    return /[a-zA-Z_$]/.test(ch);
+    const code = ch.charCodeAt(0);
+    return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95 || code === 36;
   }
 
   private isIdentifierPart(ch: string): boolean {
-    return /[a-zA-Z0-9_$]/.test(ch);
+    const code = ch.charCodeAt(0);
+    return (
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 95 ||
+      code === 36
+    );
   }
 }
 
