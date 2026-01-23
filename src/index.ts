@@ -5,13 +5,18 @@ export { expr } from "./expr";
 export { variable } from "./variable";
 
 export type {
+  BranchNode,
   CompileContext,
   CompiledData,
+  CompiledExpression,
+  ControlFlowNode,
   ExprNode,
   Expression,
   InferContextType,
   InferExpressionType,
   InferVariableType,
+  JumpNode,
+  PhiNode,
   Variable,
 } from "./types";
 

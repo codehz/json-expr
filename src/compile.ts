@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { collectIdentifiers, generate, parse, type ASTNode } from "./parser";
-import type { CompileContext, CompiledData, Expression, ExprNode, Variable } from "./types";
+import type {
+  BranchNode,
+  CompileContext,
+  CompiledData,
+  CompiledExpression,
+  Expression,
+  ExprNode,
+  JumpNode,
+  PhiNode,
+  Variable,
+} from "./types";
 
 /**
  * 编译选项
@@ -12,6 +22,13 @@ export interface CompileOptions {
    * @default true
    */
   inline?: boolean;
+
+  /**
+   * 是否启用短路求值
+   * 为 &&, ||, ??, 和三元表达式生成控制流节点
+   * @default false
+   */
+  shortCircuit?: boolean;
 }
 
 /**
@@ -45,7 +62,7 @@ export function compile<TResult>(
   variables: Record<string, Variable<z.ZodType>>,
   options: CompileOptions = {}
 ): CompiledData {
-  const { inline = true } = options;
+  const { inline = true, shortCircuit = false } = options;
   // 创建编译上下文
   const context: CompileContext = {
     variableOrder: [],
@@ -247,11 +264,127 @@ export function compile<TResult>(
     nodeAstMap.set(exprNode.id, transformed);
   }
 
-  // 第八步：生成最终表达式列表（只包含不能内联的表达式）
-  for (const exprNode of sortedExprNodes) {
-    if (!canInline(exprNode)) {
-      const ast = nodeAstMap.get(exprNode.id)!;
-      context.expressions.push(generate(ast));
+  // 第八步：生成最终表达式列表
+  if (shortCircuit) {
+    // 短路求值模式：为每个不能内联的表达式生成控制流指令
+    const expressions: CompiledExpression[] = [];
+    let nextIndex = context.variableOrder.length;
+
+    // 用于追踪已经编译过的节点
+    const compiledNodeIndices = new Map<symbol, number>();
+
+    // 编译单个 AST 节点到指令序列，返回结果所在的索引
+    const compileAst = (ast: ASTNode): number => {
+      // 检查是否需要短路处理
+      if (ast.type === "BinaryExpr" && (ast.operator === "||" || ast.operator === "&&" || ast.operator === "??")) {
+        return compileShortCircuit(ast);
+      }
+
+      if (ast.type === "ConditionalExpr") {
+        return compileConditional(ast);
+      }
+
+      // 普通表达式：直接生成
+      const exprStr = generate(ast);
+      const idx = nextIndex++;
+      expressions.push(exprStr);
+      return idx;
+    };
+
+    // 编译短路运算符 (&&, ||, ??)
+    const compileShortCircuit = (node: ASTNode & { type: "BinaryExpr" }): number => {
+      // 递归编译左操作数
+      const leftIdx = compileAst(node.left);
+
+      // 生成跳转条件
+      let branchCondition: string;
+      if (node.operator === "||") {
+        // || : 如果左边为 true，跳过右边
+        branchCondition = `$${leftIdx}`;
+      } else if (node.operator === "&&") {
+        // && : 如果左边为 false，跳过右边
+        branchCondition = `!$${leftIdx}`;
+      } else {
+        // ?? : 如果左边非 null/undefined，跳过右边
+        branchCondition = `$${leftIdx}!=null`;
+      }
+
+      // 记录 br 指令的位置，稍后填入正确的 offset
+      const branchIdx = expressions.length;
+      expressions.push(["br", branchCondition, 0] as BranchNode); // 占位，offset 稍后修复
+      nextIndex++;
+
+      // 递归编译右操作数
+      const rightIdx = compileAst(node.right);
+
+      // 修复 br 的 offset：跳过右操作数的所有指令
+      const skipCount = expressions.length - branchIdx - 1;
+      (expressions[branchIdx] as BranchNode)[2] = skipCount;
+
+      // 生成 phi 节点
+      const phiIdx = nextIndex++;
+      expressions.push(["phi"] as PhiNode);
+
+      return phiIdx;
+    };
+
+    // 编译三元表达式
+    const compileConditional = (node: ASTNode & { type: "ConditionalExpr" }): number => {
+      // 编译条件
+      const testIdx = compileAst(node.test);
+
+      // 生成条件跳转：如果条件为 true，跳到 then 分支
+      // 但在我们的布局中，else 分支在前，then 分支在后
+      // 所以：如果条件为 true，跳过 else 分支
+      const branchIdx = expressions.length;
+      expressions.push(["br", `$${testIdx}`, 0] as BranchNode); // 占位
+      nextIndex++;
+
+      // 编译 else 分支（alternate）
+      const elseStartIdx = expressions.length;
+      compileAst(node.alternate);
+      const elseEndIdx = expressions.length;
+
+      // 生成 jmp 跳过 then 分支
+      const jmpIdx = expressions.length;
+      expressions.push(["jmp", 0] as JumpNode); // 占位
+      nextIndex++;
+
+      // 编译 then 分支（consequent）
+      const thenStartIdx = expressions.length;
+      compileAst(node.consequent);
+      const thenEndIdx = expressions.length;
+
+      // 修复 br 的 offset：跳过 else 分支和 jmp 指令
+      (expressions[branchIdx] as BranchNode)[2] = jmpIdx - branchIdx;
+
+      // 修复 jmp 的 offset：跳过 then 分支
+      (expressions[jmpIdx] as JumpNode)[1] = thenEndIdx - jmpIdx - 1;
+
+      // 生成 phi 节点
+      const phiIdx = nextIndex++;
+      expressions.push(["phi"] as PhiNode);
+
+      return phiIdx;
+    };
+
+    // 为每个不能内联的表达式生成指令
+    for (const exprNode of sortedExprNodes) {
+      if (!canInline(exprNode)) {
+        const ast = nodeAstMap.get(exprNode.id)!;
+        const resultIdx = compileAst(ast);
+        compiledNodeIndices.set(exprNode.id, resultIdx);
+      }
+    }
+
+    context.expressions = expressions;
+  } else {
+    // 原始模式：直接生成表达式字符串
+    for (const exprNode of sortedExprNodes) {
+      if (!canInline(exprNode)) {
+        const ast = nodeAstMap.get(exprNode.id)!;
+        context.expressions.push(generate(ast));
+      }
     }
   }
 

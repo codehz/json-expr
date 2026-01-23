@@ -23,12 +23,41 @@ export type Expression<TContext = Record<string, unknown>, TResult = unknown> = 
 };
 
 /**
+ * 条件跳转节点
+ * 如果条件为 truthy，跳过 offset 条指令
+ */
+export type BranchNode = ["br", condition: string, offset: number];
+
+/**
+ * 无条件跳转节点
+ * 跳过 offset 条指令
+ */
+export type JumpNode = ["jmp", offset: number];
+
+/**
+ * Phi 节点
+ * 取最近一次表达式求值的结果
+ */
+export type PhiNode = ["phi"];
+
+/**
+ * 控制流节点类型
+ */
+export type ControlFlowNode = BranchNode | JumpNode | PhiNode;
+
+/**
+ * 表达式类型（可以是字符串或控制流节点）
+ */
+export type CompiledExpression = string | ControlFlowNode;
+
+/**
  * 编译后的可序列化结构
- * 数组形式：[string[], ...string[]]
+ * 数组形式：[string[], ...expressions[]]
  * - 第一个元素是变量名列表
  * - 后续是表达式序列，使用 $N 引用前面的变量或表达式
+ * - 表达式可以是字符串或控制流节点（br/jmp/phi）
  */
-export type CompiledData = [variableNames: string[], ...expressions: string[]];
+export type CompiledData = [variableNames: string[], ...expressions: CompiledExpression[]];
 
 /**
  * 内部表达式节点接口（供编译器使用）
@@ -47,7 +76,7 @@ export interface ExprNode {
 export interface CompileContext {
   variableOrder: string[];
   nodeToIndex: Map<symbol, number>;
-  expressions: string[];
+  expressions: CompiledExpression[];
 }
 
 /**

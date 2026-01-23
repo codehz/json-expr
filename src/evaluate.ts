@@ -1,9 +1,16 @@
-import type { CompiledData } from "./types";
+import type { CompiledData, CompiledExpression } from "./types";
 
 /**
  * 缓存已构造的求值函数，以提升重复执行性能
  */
 const evaluatorCache = new Map<string, (values: unknown[]) => unknown>();
+
+/**
+ * 检测编译数据是否包含控制流节点（V2 格式）
+ */
+function isV2Format(expressions: CompiledExpression[]): boolean {
+  return expressions.some((expr) => Array.isArray(expr));
+}
 
 /**
  * 执行编译后的表达式
@@ -54,8 +61,10 @@ export function evaluate<TResult>(data: CompiledData, values: Record<string, unk
   let evaluator = evaluatorCache.get(cacheKey);
 
   if (!evaluator) {
-    // 构造求值函数
-    const functionBody = buildEvaluatorFunctionBody(expressions, variableNames.length);
+    // 根据格式选择合适的函数体构造器
+    const functionBody = isV2Format(expressions)
+      ? buildEvaluatorFunctionBodyV2(expressions, variableNames.length)
+      : buildEvaluatorFunctionBody(expressions as string[], variableNames.length);
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     evaluator = new Function("$values", functionBody) as (values: unknown[]) => unknown;
     evaluatorCache.set(cacheKey, evaluator);
@@ -106,6 +115,75 @@ function buildEvaluatorFunctionBody(expressions: string[], variableCount: number
   }
 
   // 返回最后一个表达式的结果（即最后一个元素）
+  lines.push(`return $values[$values.length - 1];`);
+
+  return lines.join("\n");
+}
+
+/**
+ * 构造带控制流支持的求值函数体（V2 格式）
+ *
+ * @param expressions - 表达式列表（可包含控制流节点）
+ * @param variableCount - 变量数量
+ * @returns 函数体字符串
+ */
+function buildEvaluatorFunctionBodyV2(expressions: CompiledExpression[], variableCount: number): string {
+  if (expressions.length === 0) {
+    throw new Error("No expressions to evaluate");
+  }
+
+  const lines: string[] = [];
+
+  // 初始化变量
+  for (let i = 0; i < variableCount; i++) {
+    lines.push(`const $${i} = $values[${i}];`);
+  }
+
+  // 程序计数器和最近值寄存器
+  lines.push(`let $pc = 0;`);
+  lines.push(`let $lastValue;`);
+
+  // 预先声明所有中间变量
+  for (let i = 0; i < expressions.length; i++) {
+    lines.push(`let $${variableCount + i};`);
+  }
+
+  lines.push(`while ($pc < ${expressions.length}) {`);
+  lines.push(`  switch ($pc) {`);
+
+  for (let i = 0; i < expressions.length; i++) {
+    const expr = expressions[i];
+    const idx = variableCount + i;
+
+    lines.push(`    case ${i}: {`);
+
+    if (typeof expr === "string") {
+      // 普通表达式：求值并存储
+      lines.push(`      $${idx} = ${expr};`);
+      lines.push(`      $values[${idx}] = $${idx};`);
+      lines.push(`      $lastValue = $${idx};`);
+      lines.push(`      $pc++; break;`);
+    } else if (expr[0] === "br") {
+      // 条件跳转：条件为任意表达式
+      const [, condExpr, offset] = expr;
+      lines.push(`      if (${condExpr}) { $pc += ${offset + 1}; } else { $pc++; }`);
+      lines.push(`      break;`);
+    } else if (expr[0] === "jmp") {
+      // 无条件跳转
+      const [, offset] = expr;
+      lines.push(`      $pc += ${offset + 1}; break;`);
+    } else if (expr[0] === "phi") {
+      // phi 节点：取最近值
+      lines.push(`      $${idx} = $lastValue;`);
+      lines.push(`      $values[${idx}] = $lastValue;`);
+      lines.push(`      $pc++; break;`);
+    }
+
+    lines.push(`    }`);
+  }
+
+  lines.push(`  }`);
+  lines.push(`}`);
   lines.push(`return $values[$values.length - 1];`);
 
   return lines.join("\n");
