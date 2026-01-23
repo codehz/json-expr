@@ -315,7 +315,7 @@ export function compile<TResult>(
       nextIndex++;
 
       // 递归编译右操作数
-      const rightIdx = compileAst(node.right);
+      compileAst(node.right);
 
       // 修复 br 的 offset：跳过右操作数的所有指令
       const skipCount = expressions.length - branchIdx - 1;
@@ -341,9 +341,7 @@ export function compile<TResult>(
       nextIndex++;
 
       // 编译 else 分支（alternate）
-      const elseStartIdx = expressions.length;
       compileAst(node.alternate);
-      const elseEndIdx = expressions.length;
 
       // 生成 jmp 跳过 then 分支
       const jmpIdx = expressions.length;
@@ -351,7 +349,6 @@ export function compile<TResult>(
       nextIndex++;
 
       // 编译 then 分支（consequent）
-      const thenStartIdx = expressions.length;
       compileAst(node.consequent);
       const thenEndIdx = expressions.length;
 
