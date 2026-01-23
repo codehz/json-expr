@@ -1,1 +1,12 @@
-console.log("Hello via Bun!");
+export { variable } from "./variable"
+export { expr } from "./expr"
+export { compile } from "./compile"
+export { optimize } from "./optimize"
+export { evaluate } from "./evaluate"
+
+export type { Variable, Expression, CompiledData, ExprNode, CompileContext } from "./types"
+export type {
+  InferVariableType,
+  InferContextType,
+  InferExpressionType
+} from "./types"
