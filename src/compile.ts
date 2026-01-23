@@ -72,16 +72,14 @@ export function compile<TResult>(
 
   // 第一步：为每个表达式分配唯一 ID
   const exprIdMap = new WeakMap<Expression<Record<string, unknown>, unknown>, symbol>();
-  const getExprId = (expr: Expression<Record<string, unknown>, unknown>): symbol => {
-    if (!exprIdMap.has(expr)) {
-      exprIdMap.set(expr, Symbol("expr"));
-    }
-    const id = exprIdMap.get(expr);
+  function getExprId(expr: Expression<Record<string, unknown>, unknown>): symbol {
+    let id = exprIdMap.get(expr);
     if (id === undefined) {
-      throw new Error("Expression ID not found");
+      id = Symbol("expr");
+      exprIdMap.set(expr, id);
     }
     return id;
-  };
+  }
 
   // 为所有变量创建 node
   const nodeMap = new Map<symbol, ExprNode>();
@@ -102,7 +100,7 @@ export function compile<TResult>(
 
   // 第二步：递归收集所有依赖的节点，并检测循环依赖
   const exprNodes = new Map<symbol, ExprNode>();
-  const collectNodes = (expr: Expression<Record<string, unknown>, unknown>): ExprNode => {
+  function collectNodes(expr: Expression<Record<string, unknown>, unknown>): ExprNode {
     const exprId = getExprId(expr);
 
     if (visited.has(exprId)) {
@@ -144,7 +142,7 @@ export function compile<TResult>(
     visiting.delete(exprId);
 
     return node;
-  };
+  }
 
   // 收集根表达式的所有节点
   const rootNode = collectNodes(expression);
@@ -153,7 +151,7 @@ export function compile<TResult>(
   const sortedExprNodes: ExprNode[] = [];
   const exprVisited = new Set<symbol>();
 
-  const topologicalSort = (node: ExprNode) => {
+  function topologicalSort(node: ExprNode): void {
     if (exprVisited.has(node.id)) {
       return;
     }
@@ -169,7 +167,7 @@ export function compile<TResult>(
     if (node.tag === "expression") {
       sortedExprNodes.push(node);
     }
-  };
+  }
 
   topologicalSort(rootNode);
 
@@ -198,11 +196,11 @@ export function compile<TResult>(
   }
 
   // 判断哪些表达式可以内联（只被引用一次且不是根节点）
-  const canInline = (node: ExprNode): boolean => {
+  function canInline(node: ExprNode): boolean {
     if (!inline) return false;
     if (node.id === rootNode.id) return false; // 根节点不能内联
     return (refCount.get(node.id) ?? 0) === 1;
-  };
+  }
 
   // 第六步：为所有不能内联的表达式分配索引
   let exprIndex = 0;
@@ -270,11 +268,8 @@ export function compile<TResult>(
     const expressions: CompiledExpression[] = [];
     let nextIndex = context.variableOrder.length;
 
-    // 用于追踪已经编译过的节点
-    const compiledNodeIndices = new Map<symbol, number>();
-
     // 编译单个 AST 节点到指令序列，返回结果所在的索引
-    const compileAst = (ast: ASTNode): number => {
+    function compileAst(ast: ASTNode): number {
       // 检查是否需要短路处理
       if (ast.type === "BinaryExpr" && (ast.operator === "||" || ast.operator === "&&" || ast.operator === "??")) {
         return compileShortCircuit(ast);
@@ -289,24 +284,27 @@ export function compile<TResult>(
       const idx = nextIndex++;
       expressions.push(exprStr);
       return idx;
-    };
+    }
 
     // 编译短路运算符 (&&, ||, ??)
-    const compileShortCircuit = (node: ASTNode & { type: "BinaryExpr" }): number => {
+    function compileShortCircuit(node: ASTNode & { type: "BinaryExpr" }): number {
       // 递归编译左操作数
       const leftIdx = compileAst(node.left);
 
       // 生成跳转条件
       let branchCondition: string;
-      if (node.operator === "||") {
-        // || : 如果左边为 true，跳过右边
-        branchCondition = `$${leftIdx}`;
-      } else if (node.operator === "&&") {
-        // && : 如果左边为 false，跳过右边
-        branchCondition = `!$${leftIdx}`;
-      } else {
-        // ?? : 如果左边非 null/undefined，跳过右边
-        branchCondition = `$${leftIdx}!=null`;
+      switch (node.operator) {
+        case "||":
+          // || : 如果左边为 true，跳过右边
+          branchCondition = `$${leftIdx}`;
+          break;
+        case "&&":
+          // && : 如果左边为 false，跳过右边
+          branchCondition = `!$${leftIdx}`;
+          break;
+        default:
+          // ?? : 如果左边非 null/undefined，跳过右边
+          branchCondition = `$${leftIdx}!=null`;
       }
 
       // 记录 br 指令的位置，稍后填入正确的 offset
@@ -326,10 +324,10 @@ export function compile<TResult>(
       expressions.push(["phi"] as PhiNode);
 
       return phiIdx;
-    };
+    }
 
     // 编译三元表达式
-    const compileConditional = (node: ASTNode & { type: "ConditionalExpr" }): number => {
+    function compileConditional(node: ASTNode & { type: "ConditionalExpr" }): number {
       // 编译条件
       const testIdx = compileAst(node.test);
 
@@ -363,14 +361,13 @@ export function compile<TResult>(
       expressions.push(["phi"] as PhiNode);
 
       return phiIdx;
-    };
+    }
 
     // 为每个不能内联的表达式生成指令
     for (const exprNode of sortedExprNodes) {
       if (!canInline(exprNode)) {
         const ast = nodeAstMap.get(exprNode.id)!;
-        const resultIdx = compileAst(ast);
-        compiledNodeIndices.set(exprNode.id, resultIdx);
+        compileAst(ast);
       }
     }
 

@@ -207,18 +207,6 @@ class Parser {
     const ch = this.peek();
 
     if (ch === "!" || ch === "~" || ch === "+" || ch === "-") {
-      // 检查是否是一元运算符而非二元运算符
-      if (ch === "+" || ch === "-") {
-        this.advance();
-        this.skipWhitespace();
-        const argument = this.parseUnary();
-        return {
-          type: "UnaryExpr",
-          operator: ch,
-          argument,
-          prefix: true,
-        };
-      }
       this.advance();
       this.skipWhitespace();
       const argument = this.parseUnary();
