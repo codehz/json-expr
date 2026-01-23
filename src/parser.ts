@@ -706,6 +706,10 @@ export function generate(node: ASTNode): string {
     case "BinaryExpr": {
       const left = wrapIfNeeded(node.left, node, "left");
       const right = wrapIfNeeded(node.right, node, "right");
+      // 关键字运算符需要空格
+      if (node.operator === "in" || node.operator === "instanceof") {
+        return `${left} ${node.operator} ${right}`;
+      }
       return `${left}${node.operator}${right}`;
     }
 

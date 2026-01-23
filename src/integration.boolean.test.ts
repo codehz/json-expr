@@ -254,4 +254,17 @@ describe("集成测试：布尔表达式", () => {
       }
     });
   });
+
+  describe("in 运算符", () => {
+    test("检查对象属性", () => {
+      const obj = variable(z.record(z.string(), z.number()));
+      const key = variable(z.string());
+
+      const hasKey = expr({ key, obj })("key in obj");
+      const compiled = compile(hasKey, { key, obj });
+
+      expect(evaluate<boolean>(compiled, { key: "a", obj: { a: 1, b: 2 } })).toBe(true);
+      expect(evaluate<boolean>(compiled, { key: "c", obj: { a: 1, b: 2 } })).toBe(false);
+    });
+  });
 });

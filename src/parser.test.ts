@@ -51,6 +51,12 @@ test("parse: logical operators", () => {
   expect(generate(parse("a ?? b"))).toBe("a??b");
 });
 
+test("parse: keyword operators (in, instanceof)", () => {
+  expect(generate(parse("key in obj"))).toBe("key in obj");
+  expect(generate(parse("value instanceof Array"))).toBe("value instanceof Array");
+  expect(generate(parse("'prop' in object"))).toBe('"prop" in object');
+});
+
 test("parse: unary expressions", () => {
   expect(generate(parse("!a"))).toBe("!a");
   expect(generate(parse("-a"))).toBe("-a");
