@@ -18,13 +18,8 @@
     "*.{json,md,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
     "@eslint/js": "^9.39.2",
+    "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",
     "eslint": "^9.39.2",
@@ -34,7 +29,12 @@
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "typescript-eslint": "^8.53.1",
+    "typescript-eslint": "^8.53.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
     "zod": "^4.3.6"
   }
 }
