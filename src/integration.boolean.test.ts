@@ -232,31 +232,25 @@ describe("集成测试：布尔表达式", () => {
       expect(evaluate<boolean>(compiled, { a: false, b: false, c: true })).toBe(false);
     });
 
-    test("复杂逻辑表达式等价性", () => {
+    test("德摩根定律验证", () => {
       const a = variable(z.boolean());
       const b = variable(z.boolean());
-      const c = variable(z.boolean());
 
-      // (a && b) || c 与分步计算等价
-      const step1 = expr({ a, b })("a && b");
-      const combined = expr({ step1, c })("step1 || c");
-
-      const direct = expr({ a, b, c })("(a && b) || c");
-
-      const combinedCompiled = compile(combined, { a, b, c });
-      const directCompiled = compile(direct, { a, b, c });
+      // !(a && b) 等价于 !a || !b
+      const leftCompiled = compile(expr({ a, b })("!(a && b)"), { a, b });
+      const rightCompiled = compile(expr({ a, b })("(!a) || (!b)"), { a, b });
 
       const testCases = [
-        { a: true, b: true, c: false },
-        { a: true, b: false, c: true },
-        { a: false, b: true, c: false },
-        { a: false, b: false, c: true },
+        { a: true, b: true },
+        { a: true, b: false },
+        { a: false, b: true },
+        { a: false, b: false },
       ];
 
       for (const values of testCases) {
-        const combinedResult = evaluate<boolean>(combinedCompiled, values);
-        const directResult = evaluate<boolean>(directCompiled, values);
-        expect(combinedResult).toBe(directResult);
+        const leftResult = evaluate<boolean>(leftCompiled, values);
+        const rightResult = evaluate<boolean>(rightCompiled, values);
+        expect(leftResult).toBe(rightResult);
       }
     });
   });
