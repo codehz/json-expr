@@ -11,10 +11,10 @@ test("compile: simple variable expression", () => {
   const sum = expr({ x, y })("x + y")
   const result = compile(sum, { x, y })
 
-  // 预期结果：[["x", "y"], "$0 + $1"]（保留源码中的空格）
+  // 预期结果：[["x", "y"], "$0+$1"]（通过 AST 规范化输出，无空格）
   expect(result).toHaveLength(2)
   expect(result[0]).toEqual(["x", "y"])
-  expect(result[1]).toBe("$0 + $1")
+  expect(result[1]).toBe("$0+$1")
 })
 
 test("compile: nested expressions", () => {
@@ -27,12 +27,12 @@ test("compile: nested expressions", () => {
 
   const compiled = compile(result, { x, y })
 
-  // 预期：[["x", "y"], "$0 + $1", "$0 * $1", "$2 + $3"]
+  // 预期：[["x", "y"], "$0+$1", "$0*$1", "$2+$3"]（规范化输出）
   expect(compiled).toHaveLength(4)
   expect(compiled[0]).toEqual(["x", "y"])
-  expect(compiled[1]).toBe("$0 + $1")
-  expect(compiled[2]).toBe("$0 * $1")
-  expect(compiled[3]).toBe("$2 + $3")
+  expect(compiled[1]).toBe("$0+$1")
+  expect(compiled[2]).toBe("$0*$1")
+  expect(compiled[3]).toBe("$2+$3")
 })
 
 test("compile: expression with single variable", () => {
@@ -43,21 +43,21 @@ test("compile: expression with single variable", () => {
 
   expect(result).toHaveLength(2)
   expect(result[0]).toEqual(["x"])
-  expect(result[1]).toBe("$0 * 2")
+  expect(result[1]).toBe("$0*2")
 })
 
 test("compile: complex placeholder replacement", () => {
   const x = variable(z.number())
   const xy = variable(z.number())
 
-  // xy 是较长的名称，应该在 x 之前替换以避免部分替换
+  // xy 是较长的名称，通过 AST 解析可以正确区分
   const expr1 = expr({ xy, x })("xy + x")
   const result = compile(expr1, { xy, x })
 
   expect(result).toHaveLength(2)
   expect(result[0]).toEqual(["xy", "x"])
   // xy 应该被替换为 $0，x 应该被替换为 $1
-  expect(result[1]).toBe("$0 + $1")
+  expect(result[1]).toBe("$0+$1")
 })
 
 test("compile: detects undefined variable reference", () => {
@@ -80,4 +80,6 @@ test("compile: variable order matches declaration", () => {
   const result = compile(expr1, { a, b, c })
 
   expect(result[0]).toEqual(["a", "b", "c"])
+  // 规范化输出: a+b+c -> $0+$1+$2
+  expect(result[1]).toBe("$0+$1+$2")
 })

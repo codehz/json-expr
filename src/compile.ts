@@ -6,6 +6,7 @@ import type {
   ExprNode,
   CompileContext
 } from "./types"
+import { parse, generate, transformIdentifiers, collectIdentifiers } from "./parser"
 
 /**
  * 内部节点标识映射，用于追踪已处理的节点
@@ -202,11 +203,12 @@ export function compile<TResult>(
 
 /**
  * 将表达式源码中的上下文名替换为 $index 格式
- * 
+ * 通过 AST 解析和代码生成实现规范化输出
+ *
  * @param source - 原始表达式源码字符串
  * @param mapping - 上下文名到索引的映射
- * @returns 替换后的表达式源码
- * 
+ * @returns 替换后的表达式源码（规范化格式）
+ *
  * @example
  * ```ts
  * replacePlaceholders("x + y * 2", { x: 0, y: 1 })
@@ -217,30 +219,28 @@ function replacePlaceholders(
   source: string,
   mapping: Record<string, number>
 ): string {
-  let result = source
+  // 解析表达式为 AST
+  const ast = parse(source)
 
-  // 按照名称长度从长到短排序，避免部分替换
-  const sortedKeys = Object.keys(mapping).sort(
-    (a, b) => b.length - a.length
-  )
+  // 转换标识符
+  const transformed = transformIdentifiers(ast, (name) => {
+    if (name in mapping) {
+      return `$${mapping[name]}`
+    }
+    return name
+  })
 
-  for (const key of sortedKeys) {
-    const index = mapping[key]
-    // 使用正则表达式替换，确保只替换完整的标识符
-    // 匹配：单词边界前的 key，后面不跟字母数字或下划线
-    const regex = new RegExp(`\\b${key}\\b`, "g")
-    result = result.replace(regex, `$${index}`)
-  }
-
-  return result
+  // 生成规范化的代码
+  return generate(transformed)
 }
 
 /**
  * 从表达式源码中提取所有使用的变量名
- * 
+ * 通过 AST 解析实现精确提取
+ *
  * @param source - 表达式源码字符串
  * @returns 使用的变量名列表（去重）
- * 
+ *
  * @example
  * ```ts
  * extractVariableNames("x + y * Math.PI")
@@ -248,16 +248,6 @@ function replacePlaceholders(
  * ```
  */
 function extractVariableNames(source: string): string[] {
-  // 匹配所有标识符（变量名、属性等）
-  const identifierRegex = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g
-  const matches = source.matchAll(identifierRegex)
-  const names = new Set<string>()
-
-  for (const match of matches) {
-    if (match[1]) {
-      names.add(match[1])
-    }
-  }
-
-  return Array.from(names)
+  const ast = parse(source)
+  return Array.from(collectIdentifiers(ast))
 }
