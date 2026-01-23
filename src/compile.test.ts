@@ -8,7 +8,7 @@ test("compile: simple variable expression", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
+  const sum = expr({ x, y })("x + y")
   const result = compile(sum, { x, y })
 
   // 预期结果：[["x", "y"], "$0 + $1"]（保留源码中的空格）
@@ -21,9 +21,9 @@ test("compile: nested expressions", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
-  const product = expr({ x, y })<number>("x * y")
-  const result = expr({ sum, product })<number>("sum + product")
+  const sum = expr({ x, y })("x + y")
+  const product = expr({ x, y })("x * y")
+  const result = expr({ sum, product })("sum + product")
 
   const compiled = compile(result, { x, y })
 
@@ -38,7 +38,7 @@ test("compile: nested expressions", () => {
 test("compile: expression with single variable", () => {
   const x = variable(z.number())
 
-  const double = expr({ x })<number>("x * 2")
+  const double = expr({ x })("x * 2")
   const result = compile(double, { x })
 
   expect(result).toHaveLength(2)
@@ -51,7 +51,7 @@ test("compile: complex placeholder replacement", () => {
   const xy = variable(z.number())
 
   // xy 是较长的名称，应该在 x 之前替换以避免部分替换
-  const expr1 = expr({ xy, x })<number>("xy + x")
+  const expr1 = expr({ xy, x })("xy + x")
   const result = compile(expr1, { xy, x })
 
   expect(result).toHaveLength(2)
@@ -64,7 +64,7 @@ test("compile: detects undefined variable reference", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y + z")
+  const sum = expr({ x, y })("x + y + z")
 
   expect(() => {
     compile(sum, { x, y })
@@ -76,7 +76,7 @@ test("compile: variable order matches declaration", () => {
   const b = variable(z.number())
   const c = variable(z.number())
 
-  const expr1 = expr({ a, b, c })<number>("a + b + c")
+  const expr1 = expr({ a, b, c })("a + b + c")
   const result = compile(expr1, { a, b, c })
 
   expect(result[0]).toEqual(["a", "b", "c"])

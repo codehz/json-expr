@@ -8,9 +8,9 @@ test("集成测试：完整的表达式流程 (DESIGN07 示例)", () => {
   const y = variable(z.number())
 
   // 构建表达式
-  const sum = expr({ x, y })<number>("x + y")
-  const product = expr({ x, y })<number>("x * y")
-  const result = expr({ sum, product })<number>("sum + product")
+  const sum = expr({ x, y })("x + y")
+  const product = expr({ x, y })("x * y")
+  const result = expr({ sum, product })("sum + product")
 
   // 编译
   const data = compile(result, { x, y })
@@ -26,7 +26,7 @@ test("集成测试：基础变量和表达式", () => {
   const a = variable(z.number())
   const b = variable(z.number())
 
-  const simple = expr({ a, b })<number>("a + b")
+  const simple = expr({ a, b })("a + b")
   const compiled = compile(simple, { a, b })
 
   const result = evaluate<number>(compiled, { a: 10, b: 20 })
@@ -37,9 +37,9 @@ test("集成测试：优化流程", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
-  const product = expr({ x, y })<number>("x * y")
-  const result = expr({ sum, product })<number>("sum + product")
+  const sum = expr({ x, y })("x + y")
+  const product = expr({ x, y })("x * y")
+  const result = expr({ sum, product })("sum + product")
 
   // 编译
   const data = compile(result, { x, y })
@@ -60,9 +60,9 @@ test("集成测试：多层嵌套表达式", () => {
   const b = variable(z.number())
   const c = variable(z.number())
 
-  const layer1 = expr({ a, b })<number>("a + b")
-  const layer2 = expr({ layer1, c })<number>("layer1 * c")
-  const layer3 = expr({ layer2 })<number>("layer2 + 1")
+  const layer1 = expr({ a, b })("a + b")
+  const layer2 = expr({ layer1, c })("layer1 * c")
+  const layer3 = expr({ layer2 })("layer2 + 1")
 
   const compiled = compile(layer3, { a, b, c })
 
@@ -79,9 +79,9 @@ test("集成测试：复杂的数学运算", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const expr1 = expr({ x, y })<number>("x * y")
-  const expr2 = expr({ x, y })<number>("x + y")
-  const expr3 = expr({ expr1, expr2 })<number>("expr1 - expr2")
+  const expr1 = expr({ x, y })("x * y")
+  const expr2 = expr({ x, y })("x + y")
+  const expr3 = expr({ expr1, expr2 })("expr1 - expr2")
 
   const compiled = compile(expr3, { x, y })
   const result = evaluate<number>(compiled, { x: 5, y: 3 })
@@ -94,9 +94,9 @@ test("集成测试：带有中间优化的执行流程", () => {
   const q = variable(z.number())
   const r = variable(z.number())
 
-  const expr1 = expr({ p, q })<number>("p + q")
-  const expr2 = expr({ q, r })<number>("q * r")
-  const expr3 = expr({ expr1, expr2 })<number>("expr1 + expr2")
+  const expr1 = expr({ p, q })("p + q")
+  const expr2 = expr({ q, r })("q * r")
+  const expr3 = expr({ expr1, expr2 })("expr1 + expr2")
 
   // 编译
   const compiled = compile(expr3, { p, q, r })
@@ -119,9 +119,9 @@ test("集成测试：带有中间优化的执行流程", () => {
 test("集成测试：连续算术运算", () => {
   const x = variable(z.number())
 
-  const expr1 = expr({ x })<number>("x + 1")
-  const expr2 = expr({ expr1 })<number>("expr1 * 2")
-  const expr3 = expr({ expr2 })<number>("expr3 - 3")
+  const expr1 = expr({ x })("x + 1")
+  const expr2 = expr({ expr1 })("expr1 * 2")
+  const expr3 = expr({ expr2 })("expr3 - 3")
 
   // 此处应该捕获错误：expr3 在上下文中不存在
   expect(() => {
@@ -132,9 +132,9 @@ test("集成测试：连续算术运算", () => {
 test("集成测试：正确的链式计算", () => {
   const x = variable(z.number())
 
-  const expr1 = expr({ x })<number>("x + 1")
-  const expr2 = expr({ expr1 })<number>("expr1 * 2")
-  const expr3 = expr({ expr2 })<number>("expr2 - 3")
+  const expr1 = expr({ x })("x + 1")
+  const expr2 = expr({ expr1 })("expr1 * 2")
+  const expr3 = expr({ expr2 })("expr2 - 3")
 
   const compiled = compile(expr3, { x })
   const result = evaluate<number>(compiled, { x: 5 })
@@ -145,7 +145,7 @@ test("集成测试：正确的链式计算", () => {
 test("集成测试：布尔表达式", () => {
   const age = variable(z.number())
 
-  const isAdult = expr({ age })<boolean>("age >= 18")
+  const isAdult = expr({ age })("age >= 18")
   const compiled = compile(isAdult, { age })
 
   const result1 = evaluate<boolean>(compiled, { age: 25 })
@@ -159,9 +159,9 @@ test("集成测试：多变量布尔逻辑", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const isGreater = expr({ x, y })<boolean>("x > y")
-  const isEqual = expr({ x, y })<boolean>("x === y")
-  const combined = expr({ isGreater, isEqual })<boolean>("isGreater || isEqual")
+  const isGreater = expr({ x, y })("x > y")
+  const isEqual = expr({ x, y })("x === y")
+  const combined = expr({ isGreater, isEqual })("isGreater || isEqual")
 
   const compiled = compile(combined, { x, y })
 
@@ -181,13 +181,13 @@ test("集成测试：多个独立表达式链", () => {
   const c = variable(z.number())
 
   // 链 1: a 和 b
-  const sum = expr({ a, b })<number>("a + b")
+  const sum = expr({ a, b })("a + b")
   
   // 链 2: 从链1和 c
-  const multiple = expr({ sum, c })<number>("sum * c")
+  const multiple = expr({ sum, c })("sum * c")
   
   // 链 3: 从链2
-  const final = expr({ multiple })<number>("multiple + 10")
+  const final = expr({ multiple })("multiple + 10")
 
   const compiled = compile(final, { a, b, c })
   const result = evaluate<number>(compiled, { a: 1, b: 2, c: 3 })
@@ -200,9 +200,9 @@ test("集成测试：优化后的结果一致性", () => {
   const y = variable(z.number())
   const zVar = variable(z.number())
 
-  const e1 = expr({ x, y })<number>("x * y")
-  const e2 = expr({ y, zVar })<number>("y + zVar")
-  const e3 = expr({ e1, e2 })<number>("e1 + e2")
+  const e1 = expr({ x, y })("x * y")
+  const e2 = expr({ y, zVar })("y + zVar")
+  const e3 = expr({ e1, e2 })("e1 + e2")
 
   const compiled = compile(e3, { x, y, zVar })
   const optimized = optimize(compiled)
@@ -221,7 +221,7 @@ test("集成测试：简单字符串表达式", () => {
   const a = variable(z.string())
   const b = variable(z.string())
 
-  const combined = expr({ a, b })<string>("a + b")
+  const combined = expr({ a, b })("a + b")
   const compiled = compile(combined, { a, b })
   const result = evaluate<string>(compiled, { a: "Hello", b: "World" })
   expect(result).toBe("HelloWorld")
@@ -231,7 +231,7 @@ test("集成测试：数字类型保持一致", () => {
   const p = variable(z.number())
   const q = variable(z.number())
 
-  const calc = expr({ p, q })<number>("p + q * 2")
+  const calc = expr({ p, q })("p + q * 2")
   const compiled = compile(calc, { p, q })
   const result = evaluate<number>(compiled, { p: 10, q: 5 })
   expect(result).toBe(20)  // 10 + 5*2 = 10 + 10 = 20

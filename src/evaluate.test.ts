@@ -9,7 +9,7 @@ test("evaluate: simple arithmetic expression", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
+  const sum = expr({ x, y })("x + y")
   const compiled = compile(sum, { x, y })
 
   const result = evaluate<number>(compiled, { x: 2, y: 3 })
@@ -20,9 +20,9 @@ test("evaluate: nested expressions", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
-  const product = expr({ x, y })<number>("x * y")
-  const result_expr = expr({ sum, product })<number>("sum + product")
+  const sum = expr({ x, y })("x + y")
+  const product = expr({ x, y })("x * y")
+  const result_expr = expr({ sum, product })("sum + product")
 
   const compiled = compile(result_expr, { x, y })
   // [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
@@ -35,9 +35,9 @@ test("evaluate: nested expressions", () => {
 test("evaluate: complex expression with multiple operations", () => {
   const x = variable(z.number())
 
-  const double = expr({ x })<number>("x * 2")
-  const add_one = expr({ double })<number>("double + 1")
-  const square = expr({ add_one })<number>("add_one * add_one")
+  const double = expr({ x })("x * 2")
+  const add_one = expr({ double })("double + 1")
+  const square = expr({ add_one })("add_one * add_one")
 
   const compiled = compile(square, { x })
   // [["x"], "x*2", "double+1", "add_one*add_one"]
@@ -51,7 +51,7 @@ test("evaluate: expression with string concatenation", () => {
   const x = variable(z.string())
   const y = variable(z.string())
 
-  const expr_xy = expr({ x, y })<string>("x + y")
+  const expr_xy = expr({ x, y })("x + y")
   const compiled = compile(expr_xy, { x, y })
 
   const result = evaluate<string>(compiled, { x: "Hello", y: " World" })
@@ -62,7 +62,7 @@ test("evaluate: missing required variable throws error", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const sum = expr({ x, y })<number>("x + y")
+  const sum = expr({ x, y })("x + y")
   const compiled = compile(sum, { x, y })
 
   expect(() => {
@@ -72,7 +72,7 @@ test("evaluate: missing required variable throws error", () => {
 
 test("evaluate: caches evaluator functions", () => {
   const x = variable(z.number())
-  const sum = expr({ x })<number>("x + 1")
+  const sum = expr({ x })("x + 1")
   const compiled = compile(sum, { x })
 
   // First call constructs the function
@@ -89,7 +89,7 @@ test("evaluate: works with complex numeric expressions", () => {
   const b = variable(z.number())
   const c = variable(z.number())
 
-  const expr_abc = expr({ a, b, c })<number>("a * b + c / 2")
+  const expr_abc = expr({ a, b, c })("a * b + c / 2")
   const compiled = compile(expr_abc, { a, b, c })
 
   const result = evaluate<number>(compiled, { a: 2, b: 3, c: 10 })
@@ -101,7 +101,7 @@ test("evaluate: works with boolean expressions", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
-  const comparison = expr({ x, y })<boolean>("x > y")
+  const comparison = expr({ x, y })("x > y")
   const compiled = compile(comparison, { x, y })
 
   const result1 = evaluate<boolean>(compiled, { x: 5, y: 3 })

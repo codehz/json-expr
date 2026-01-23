@@ -10,3 +10,12 @@ export type {
   InferContextType,
   InferExpressionType
 } from "./types"
+
+export type {
+  ValidateExpression,
+  InferExpressionResult,
+  ExpressionType,
+  ParseExpression,
+  ExtractType,
+  ContextTypeMap
+} from "./type-parser"
