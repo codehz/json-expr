@@ -92,8 +92,7 @@ function buildEvaluatorFunctionBody(expressions: string[], variableCount: number
 
   // 为了使 $0, $1 等能在函数体中访问，我们需要创建局部变量
   // 或者使用代理访问值数组
-  lines.push("const $0 = $values[0];");
-  for (let i = 1; i < variableCount; i++) {
+  for (let i = 0; i < variableCount; i++) {
     lines.push(`const $${i} = $values[${i}];`);
   }
 
