@@ -1,8 +1,8 @@
 import { test, expect } from "bun:test"
 import { z } from "zod"
-import { variable, expr, compile, optimize, evaluate } from "./index"
+import { variable, expr, compile, evaluate } from "./index"
 
-test("集成测试：完整的表达式流程 (DESIGN07 示例)", () => {
+test("集成测试：完整的表达式流程", () => {
   // 定义变量
   const x = variable(z.number())
   const y = variable(z.number())
@@ -12,12 +12,12 @@ test("集成测试：完整的表达式流程 (DESIGN07 示例)", () => {
   const product = expr({ x, y })("x * y")
   const result = expr({ sum, product })("sum + product")
 
-  // 编译
+  // 编译（默认内联优化）
   const data = compile(result, { x, y })
   expect(data[0]).toEqual(["x", "y"])
-  expect(data.length).toBe(4) // 变量名 + 3个表达式
+  expect(data.length).toBe(2) // 变量名 + 内联后的单个表达式
 
-  // 执行（未优化）
+  // 执行
   const value = evaluate<number>(data, { x: 2, y: 3 })
   expect(value).toBe(11) // 2+3 + 2*3 = 5 + 6 = 11
 })
@@ -33,7 +33,7 @@ test("集成测试：基础变量和表达式", () => {
   expect(result).toBe(30)
 })
 
-test("集成测试：优化流程", () => {
+test("集成测试：内联优化（默认开启）", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
@@ -41,18 +41,20 @@ test("集成测试：优化流程", () => {
   const product = expr({ x, y })("x * y")
   const result = expr({ sum, product })("sum + product")
 
-  // 编译
-  const data = compile(result, { x, y })
-  expect(data.length).toBe(4) // [变量名, expr1, expr2, expr3]
+  // 默认编译（内联优化）
+  const optimized = compile(result, { x, y })
+  // 内联优化后只剩一个表达式（sum 和 product 都只被引用一次）
+  expect(optimized.length).toBe(2) // [变量名, 内联后的表达式]
 
-  // 优化
-  const optimized = optimize(data)
-  // 优化后应该减少表达式数量（内联仅被引用一次的子表达式）
-  expect(optimized.length).toBeLessThanOrEqual(data.length)
+  // 不内联编译
+  const unoptimized = compile(result, { x, y }, { inline: false })
+  expect(unoptimized.length).toBe(4) // [变量名, expr1, expr2, expr3]
 
-  // 执行优化后的版本
-  const value = evaluate<number>(optimized, { x: 2, y: 3 })
-  expect(value).toBe(11)
+  // 执行结果一致
+  const value1 = evaluate<number>(optimized, { x: 2, y: 3 })
+  const value2 = evaluate<number>(unoptimized, { x: 2, y: 3 })
+  expect(value1).toBe(11)
+  expect(value2).toBe(11)
 })
 
 test("集成测试：多层嵌套表达式", () => {
@@ -89,7 +91,7 @@ test("集成测试：复杂的数学运算", () => {
   expect(result).toBe(7)
 })
 
-test("集成测试：带有中间优化的执行流程", () => {
+test("集成测试：内联优化对比", () => {
   const p = variable(z.number())
   const q = variable(z.number())
   const r = variable(z.number())
@@ -98,17 +100,14 @@ test("集成测试：带有中间优化的执行流程", () => {
   const expr2 = expr({ q, r })("q * r")
   const expr3 = expr({ expr1, expr2 })("expr1 + expr2")
 
-  // 编译
-  const compiled = compile(expr3, { p, q, r })
-  
-  // 记录编译前的表达式数量
-  const beforeOptimize = compiled.length
+  // 不内联编译
+  const unoptimized = compile(expr3, { p, q, r }, { inline: false })
 
-  // 优化
-  const optimized = optimize(compiled)
-  
-  // 验证优化后的表达式数量不会增加
-  expect(optimized.length).toBeLessThanOrEqual(beforeOptimize)
+  // 默认编译（内联优化）
+  const optimized = compile(expr3, { p, q, r })
+
+  // 验证内联优化后的表达式数量减少
+  expect(optimized.length).toBeLessThan(unoptimized.length)
 
   // 执行并验证结果正确
   const result = evaluate<number>(optimized, { p: 2, q: 3, r: 4 })
@@ -195,7 +194,7 @@ test("集成测试：多个独立表达式链", () => {
   expect(result).toBe(19)
 })
 
-test("集成测试：优化后的结果一致性", () => {
+test("集成测试：内联与非内联结果一致性", () => {
   const x = variable(z.number())
   const y = variable(z.number())
   const zVar = variable(z.number())
@@ -204,17 +203,17 @@ test("集成测试：优化后的结果一致性", () => {
   const e2 = expr({ y, zVar })("y + zVar")
   const e3 = expr({ e1, e2 })("e1 + e2")
 
-  const compiled = compile(e3, { x, y, zVar })
-  const optimized = optimize(compiled)
+  const optimized = compile(e3, { x, y, zVar }) // 默认内联
+  const unoptimized = compile(e3, { x, y, zVar }, { inline: false })
 
   const testValue = { x: 2, y: 3, zVar: 4 }
-  const resultCompiled = evaluate<number>(compiled, testValue)
   const resultOptimized = evaluate<number>(optimized, testValue)
+  const resultUnoptimized = evaluate<number>(unoptimized, testValue)
 
   // 2*3 + (3+4) = 6 + 7 = 13
-  expect(resultCompiled).toBe(13)
   expect(resultOptimized).toBe(13)
-  expect(resultCompiled).toBe(resultOptimized)
+  expect(resultUnoptimized).toBe(13)
+  expect(resultOptimized).toBe(resultUnoptimized)
 })
 
 test("集成测试：简单字符串表达式", () => {

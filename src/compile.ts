@@ -6,26 +6,31 @@ import type {
   ExprNode,
   CompileContext
 } from "./types"
-import { parse, generate, transformIdentifiers, collectIdentifiers } from "./parser"
+import { parse, generate, collectIdentifiers, type ASTNode } from "./parser"
 
 /**
- * 内部节点标识映射，用于追踪已处理的节点
+ * 编译选项
  */
-interface NodeInfo {
-  node: ExprNode
-  refCount: number
+export interface CompileOptions {
+  /**
+   * 是否启用内联优化
+   * 将只被引用一次的子表达式内联到使用位置
+   * @default true
+   */
+  inline?: boolean
 }
 
 /**
  * 将表达式树编译为可序列化的 JSON 结构
- * 
+ *
  * @template TResult - 表达式结果类型
  * @param expression - 根表达式
  * @param variables - 所有使用的变量定义
+ * @param options - 编译选项
  * @returns 编译后的数据结构 [变量名列表, 表达式1, 表达式2, ...]
- * 
+ *
  * @throws 如果检测到循环依赖或未定义的变量引用
- * 
+ *
  * @example
  * ```ts
  * const x = variable(z.number())
@@ -33,13 +38,15 @@ interface NodeInfo {
  * const sum = expr({ x, y })<number>("x + y")
  * const result = expr({ sum })<number>("sum * 2")
  * const compiled = compile(result, { x, y })
- * // => [["x", "y"], "$0+$1", "$1*2"]
+ * // => [["x", "y"], "($0+$1)*2"]  // 内联优化后
  * ```
  */
 export function compile<TResult>(
   expression: Expression<any, TResult>,
-  variables: Record<string, Variable<any>>
+  variables: Record<string, Variable<any>>,
+  options: CompileOptions = {}
 ): CompiledData {
+  const { inline = true } = options
   // 创建编译上下文
   const context: CompileContext = {
     variableOrder: [],
@@ -146,8 +153,7 @@ export function compile<TResult>(
 
   topologicalSort(rootNode)
 
-  // 第四步：分配索引
-  // 变量分配索引 0 ~ N-1
+  // 第四步：分配变量索引 0 ~ N-1
   for (const [name, varNode] of variableNodes.entries()) {
     if (!context.nodeToIndex.has(varNode.id)) {
       context.nodeToIndex.set(varNode.id, context.variableOrder.length)
@@ -155,44 +161,98 @@ export function compile<TResult>(
     }
   }
 
-  // 表达式分配索引 N ~ M
-  let exprIndex = 0
+  // 第五步：计算每个表达式节点的引用次数
+  const refCount = new Map<symbol, number>()
   for (const exprNode of sortedExprNodes) {
-    const index = context.variableOrder.length + exprIndex
-    context.nodeToIndex.set(exprNode.id, index)
-    exprIndex++
+    refCount.set(exprNode.id, 0)
   }
 
-  // 第五步：生成表达式源码，替换上下文引用
+  for (const exprNode of sortedExprNodes) {
+    if (exprNode.context) {
+      for (const contextNode of Object.values(exprNode.context)) {
+        if (contextNode.tag === "expression") {
+          refCount.set(contextNode.id, (refCount.get(contextNode.id) ?? 0) + 1)
+        }
+      }
+    }
+  }
+
+  // 判断哪些表达式可以内联（只被引用一次且不是根节点）
+  const canInline = (node: ExprNode): boolean => {
+    if (!inline) return false
+    if (node.id === rootNode.id) return false // 根节点不能内联
+    return (refCount.get(node.id) ?? 0) === 1
+  }
+
+  // 第六步：为所有不能内联的表达式分配索引
+  let exprIndex = 0
+  for (const exprNode of sortedExprNodes) {
+    if (!canInline(exprNode)) {
+      const index = context.variableOrder.length + exprIndex
+      context.nodeToIndex.set(exprNode.id, index)
+      exprIndex++
+    }
+  }
+
+  // 第七步：为每个表达式生成 AST，并根据内联选项处理
+  const nodeAstMap = new Map<symbol, ASTNode>()
+
+  // 为变量生成 AST（始终是 $N 标识符）
+  for (const [, varNode] of variableNodes.entries()) {
+    const index = context.nodeToIndex.get(varNode.id)!
+    nodeAstMap.set(varNode.id, { type: "Identifier", name: `$${index}` })
+  }
+
+  // 为每个表达式生成 AST（按拓扑顺序，确保依赖的节点已处理）
   for (const exprNode of sortedExprNodes) {
     if (!exprNode.context || !exprNode.source) {
       throw new Error("Invalid expression node")
     }
 
-    const mapping: Record<string, number> = {}
-    for (const [key, contextNode] of Object.entries(exprNode.context)) {
-      const index = context.nodeToIndex.get(contextNode.id)
-      if (index === undefined) {
-        throw new Error(`Cannot find index for context item: ${key}`)
-      }
-      mapping[key] = index
-    }
-
     // 检查表达式源码中是否引用了未定义的变量
     const usedVariables = extractVariableNames(exprNode.source)
     for (const varName of usedVariables) {
-      if (!(varName in mapping)) {
+      if (!(varName in exprNode.context)) {
         throw new Error(
-          `Undefined variable reference: ${varName} (available: ${Object.keys(mapping).join(", ")})`
+          `Undefined variable reference: ${varName} (available: ${Object.keys(exprNode.context).join(", ")})`
         )
       }
     }
 
-    const compiledSource = replacePlaceholders(exprNode.source, mapping)
-    context.expressions.push(compiledSource)
+    // 解析表达式为 AST
+    const ast = parse(exprNode.source)
+
+    // 转换标识符：将上下文中的名称替换为对应的 AST 节点
+    const transformed = inlineTransform(ast, (name) => {
+      const contextNode = exprNode.context![name]
+      if (!contextNode) return null
+
+      if (contextNode.tag === "variable") {
+        // 变量始终替换为 $N
+        return nodeAstMap.get(contextNode.id) ?? null
+      } else {
+        // 表达式节点：如果可内联，返回其 AST；否则返回 $N
+        if (canInline(contextNode)) {
+          return nodeAstMap.get(contextNode.id) ?? null
+        } else {
+          const index = context.nodeToIndex.get(contextNode.id)!
+          return { type: "Identifier", name: `$${index}` } as ASTNode
+        }
+      }
+    })
+
+    nodeAstMap.set(exprNode.id, transformed)
   }
 
-  // 第六步：组合结果
+  // 第八步：生成最终表达式列表（只包含不能内联的表达式）
+  for (const exprNode of sortedExprNodes) {
+    if (!canInline(exprNode)) {
+      const ast = nodeAstMap.get(exprNode.id)!
+      context.expressions.push(generate(ast))
+    }
+  }
+
+  // 第九步：组合结果
   const result: CompiledData = [
     context.variableOrder,
     ...context.expressions
@@ -202,36 +262,84 @@ export function compile<TResult>(
 }
 
 /**
- * 将表达式源码中的上下文名替换为 $index 格式
- * 通过 AST 解析和代码生成实现规范化输出
+ * 将 AST 中的标识符替换为对应的 AST 节点（用于内联优化）
  *
- * @param source - 原始表达式源码字符串
- * @param mapping - 上下文名到索引的映射
- * @returns 替换后的表达式源码（规范化格式）
- *
- * @example
- * ```ts
- * replacePlaceholders("x + y * 2", { x: 0, y: 1 })
- * // => "$0+$1*2"
- * ```
+ * @param node - 要转换的 AST 节点
+ * @param getReplacementAst - 根据标识符名称返回替换的 AST 节点，返回 null 表示不替换
+ * @returns 转换后的 AST 节点
  */
-function replacePlaceholders(
-  source: string,
-  mapping: Record<string, number>
-): string {
-  // 解析表达式为 AST
-  const ast = parse(source)
-
-  // 转换标识符
-  const transformed = transformIdentifiers(ast, (name) => {
-    if (name in mapping) {
-      return `$${mapping[name]}`
+function inlineTransform(
+  node: ASTNode,
+  getReplacementAst: (name: string) => ASTNode | null
+): ASTNode {
+  switch (node.type) {
+    case "Identifier": {
+      const replacement = getReplacementAst(node.name)
+      return replacement ?? node
     }
-    return name
-  })
 
-  // 生成规范化的代码
-  return generate(transformed)
+    case "BinaryExpr":
+      return {
+        ...node,
+        left: inlineTransform(node.left, getReplacementAst),
+        right: inlineTransform(node.right, getReplacementAst),
+      }
+
+    case "UnaryExpr":
+      return {
+        ...node,
+        argument: inlineTransform(node.argument, getReplacementAst),
+      }
+
+    case "ConditionalExpr":
+      return {
+        ...node,
+        test: inlineTransform(node.test, getReplacementAst),
+        consequent: inlineTransform(node.consequent, getReplacementAst),
+        alternate: inlineTransform(node.alternate, getReplacementAst),
+      }
+
+    case "MemberExpr":
+      return {
+        ...node,
+        object: inlineTransform(node.object, getReplacementAst),
+        property: node.computed
+          ? inlineTransform(node.property, getReplacementAst)
+          : node.property,
+      }
+
+    case "CallExpr":
+      return {
+        ...node,
+        callee: inlineTransform(node.callee, getReplacementAst),
+        arguments: node.arguments.map((arg) =>
+          inlineTransform(arg, getReplacementAst)
+        ),
+      }
+
+    case "ArrayExpr":
+      return {
+        ...node,
+        elements: node.elements.map((el) =>
+          inlineTransform(el, getReplacementAst)
+        ),
+      }
+
+    case "ObjectExpr":
+      return {
+        ...node,
+        properties: node.properties.map((prop) => ({
+          ...prop,
+          key: prop.computed
+            ? inlineTransform(prop.key, getReplacementAst)
+            : prop.key,
+          value: inlineTransform(prop.value, getReplacementAst),
+        })),
+      }
+
+    default:
+      return node
+  }
 }
 
 /**

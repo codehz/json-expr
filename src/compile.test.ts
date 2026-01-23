@@ -17,7 +17,7 @@ test("compile: simple variable expression", () => {
   expect(result[1]).toBe("$0+$1")
 })
 
-test("compile: nested expressions", () => {
+test("compile: nested expressions with inline optimization", () => {
   const x = variable(z.number())
   const y = variable(z.number())
 
@@ -25,7 +25,25 @@ test("compile: nested expressions", () => {
   const product = expr({ x, y })("x * y")
   const result = expr({ sum, product })("sum + product")
 
+  // 默认开启内联优化
   const compiled = compile(result, { x, y })
+
+  // 内联优化后，只剩一个表达式
+  expect(compiled).toHaveLength(2)
+  expect(compiled[0]).toEqual(["x", "y"])
+  expect(compiled[1]).toBe("$0+$1+$0*$1")
+})
+
+test("compile: nested expressions without inline", () => {
+  const x = variable(z.number())
+  const y = variable(z.number())
+
+  const sum = expr({ x, y })("x + y")
+  const product = expr({ x, y })("x * y")
+  const result = expr({ sum, product })("sum + product")
+
+  // 禁用内联优化
+  const compiled = compile(result, { x, y }, { inline: false })
 
   // 预期：[["x", "y"], "$0+$1", "$0*$1", "$2+$3"]（规范化输出）
   expect(compiled).toHaveLength(4)
