@@ -10,12 +10,14 @@ type TrimStart<S extends string> = S extends ` ${infer Rest}` | `\t${infer Rest}
   ? TrimStart<Rest>
   : S;
 
-type TrimEnd<S extends string> = S extends `${infer Rest} ` | `${infer Rest}\t` | `${infer Rest}\n` ? TrimEnd<Rest> : S;
+type __TrimEnd<S extends string> = S extends `${infer Rest} ` | `${infer Rest}\t` | `${infer Rest}\n`
+  ? __TrimEnd<Rest>
+  : S;
 
-type Trim<S extends string> = TrimStart<TrimEnd<S>>;
+type __Trim<S extends string> = TrimStart<__TrimEnd<S>>;
 
 /** 字符串是否以某前缀开头 */
-type StartsWith<S extends string, Prefix extends string> = S extends `${Prefix}${string}` ? true : false;
+type _StartsWith<S extends string, Prefix extends string> = S extends `${Prefix}${string}` ? true : false;
 
 /** 是否是字母或下划线 */
 type IsIdentifierStart<C extends string> = C extends
@@ -88,7 +90,7 @@ type IsIdentifierChar<C extends string> =
 type IsDigit<C extends string> = C extends "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ? true : false;
 
 /** 是否是运算符字符 */
-type IsOperatorChar<C extends string> = C extends
+type _IsOperatorChar<C extends string> = C extends
   | "+"
   | "-"
   | "*"
@@ -231,7 +233,7 @@ type ExtractIdentifiers<S extends string, Collected extends string = never> = S 
 
 /** 从 Variable 或 Expression 提取值类型 */
 export type ExtractType<T> =
-  T extends Variable<infer Schema> ? z.infer<Schema> : T extends Expression<any, infer R> ? R : never;
+  T extends Variable<infer Schema> ? z.infer<Schema> : T extends Expression<unknown, infer R> ? R : never;
 
 /** 从上下文对象构建类型映射 */
 export type ContextTypeMap<TContext> = {
@@ -239,7 +241,7 @@ export type ContextTypeMap<TContext> = {
 };
 
 /** 检查所有标识符是否都在上下文中定义 */
-type ValidateIdentifiers<Ids extends string, ContextKeys extends string> = Ids extends ContextKeys ? true : false;
+type _ValidateIdentifiers<Ids extends string, ContextKeys extends string> = Ids extends ContextKeys ? true : false;
 
 /** 找出未定义的标识符 */
 type FindUndefinedIdentifiers<Ids extends string, ContextKeys extends string> = Ids extends ContextKeys ? never : Ids;
@@ -484,7 +486,7 @@ type ParsePostfixTail<Base, S extends string> =
         : ParsePostfixTail<ASTMemberAccess<Base, Prop>, Rest2>
       : ParseResult<Base, S>
     : TrimStart<S> extends `[${infer Rest}`
-      ? ParseTernary<Rest> extends ParseResult<infer Index, infer Rest2>
+      ? ParseTernary<Rest> extends ParseResult<infer _Index, infer Rest2>
         ? TrimStart<Rest2> extends `]${infer Rest3}`
           ? ParsePostfixTail<ASTMemberAccess<Base, "[computed]">, Rest3>
           : ParseResult<Base, S>
@@ -530,15 +532,15 @@ type ParsePrimary<S extends string> =
         ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
           ? ParseIdentifierPrimary<S>
           : ParseResult<ASTBoolean, Rest>
-        : TrimStart<S> extends `${infer C}${infer _Rest}`
+        : TrimStart<S> extends `${infer C}${infer __Rest}`
           ? IsDigit<C> extends true
-            ? ParseNumberLiteral<TrimStart<S>> extends [infer _Num, infer Rest2 extends string]
+            ? ParseNumberLiteral<TrimStart<S>> extends [infer __Num, infer Rest2 extends string]
               ? ParseResult<ASTNumber, Rest2>
               : ParseError
             : C extends "-"
-              ? TrimStart<_Rest> extends `${infer C2}${string}`
+              ? TrimStart<__Rest> extends `${infer C2}${string}`
                 ? IsDigit<C2> extends true
-                  ? ParseNumberLiteral<TrimStart<_Rest>> extends [infer _Num, infer Rest2 extends string]
+                  ? ParseNumberLiteral<TrimStart<__Rest>> extends [infer __Num, infer Rest2 extends string]
                     ? ParseResult<ASTNumber, Rest2>
                     : ParseError
                   : ParseError
@@ -559,11 +561,11 @@ type ParseIdentifierPrimary<S extends string> =
       : ParseResult<ASTIdentifier<Name>, Rest>
     : ParseError;
 
-type ParseStringLiteral<S extends string> = S extends `'${infer _}`
+type ParseStringLiteral<S extends string> = S extends `'${infer __}`
   ? { rest: SkipSingleQuoteString<S> }
-  : S extends `"${infer _}`
+  : S extends `"${infer __}`
     ? { rest: SkipDoubleQuoteString<S> }
-    : S extends `\`${infer _}`
+    : S extends `\`${infer __}`
       ? { rest: SkipTemplateString<S> }
       : never;
 
@@ -590,22 +592,22 @@ export type InferTypeFromAST<AST, TypeMap> = AST extends ASTNumber
         ? Name extends keyof TypeMap
           ? TypeMap[Name]
           : unknown
-        : AST extends ASTUnary<infer Op, infer Operand>
-          ? InferUnaryType<Op, InferTypeFromAST<Operand, TypeMap>>
+        : AST extends ASTUnary<infer Op, infer __Operand>
+          ? InferUnaryType<Op, InferTypeFromAST<__Operand, TypeMap>>
           : AST extends ASTBinary<infer Op, infer Left, infer Right>
             ? InferBinaryType<Op, InferTypeFromAST<Left, TypeMap>, InferTypeFromAST<Right, TypeMap>>
-            : AST extends ASTTernary<infer _Cond, infer Then, infer Else>
+            : AST extends ASTTernary<infer __Cond, infer Then, infer Else>
               ? InferTypeFromAST<Then, TypeMap> | InferTypeFromAST<Else, TypeMap>
               : AST extends ASTParen<infer Inner>
                 ? InferTypeFromAST<Inner, TypeMap>
                 : AST extends ASTMemberAccess<infer Obj, infer Prop>
                   ? InferMemberType<InferTypeFromAST<Obj, TypeMap>, Prop>
-                  : AST extends ASTCall<infer Callee, infer _Args>
+                  : AST extends ASTCall<infer Callee, infer __Args>
                     ? InferCallType<InferTypeFromAST<Callee, TypeMap>>
                     : unknown;
 
 /** 一元运算符类型推导 */
-type InferUnaryType<Op extends string, Operand> = Op extends "!" ? boolean : Op extends "-" | "+" ? number : unknown;
+type InferUnaryType<Op extends string, __Operand> = Op extends "!" ? boolean : Op extends "-" | "+" ? number : unknown;
 
 /** 二元运算符类型推导 */
 type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
@@ -636,10 +638,10 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
 
 /** 成员访问类型推导 */
 type InferMemberType<Obj, Prop extends string> =
-  Obj extends Record<string, any> ? (Prop extends keyof Obj ? Obj[Prop] : unknown) : unknown;
+  Obj extends Record<string, unknown> ? (Prop extends keyof Obj ? Obj[Prop] : unknown) : unknown;
 
 /** 函数调用类型推导 */
-type InferCallType<Callee> = Callee extends (...args: any[]) => infer R ? R : unknown;
+type InferCallType<Callee> = Callee extends (...args: unknown[]) => infer R ? R : unknown;
 
 // ============================================================================
 // 主要导出类型

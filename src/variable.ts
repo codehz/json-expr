@@ -22,6 +22,6 @@ export function variable<T extends z.ZodType>(schema: T): Variable<T> {
   return {
     _tag: "variable",
     schema,
-    _type: undefined as any, // 仅用于类型推导，运行时不存在
+    _type: undefined as unknown as z.infer<T>, // 仅用于类型推导，运行时不存在
   } as Variable<T>;
 }

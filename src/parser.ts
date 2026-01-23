@@ -777,8 +777,11 @@ export function generate(node: ASTNode): string {
       return `{${props.join(",")}}`;
     }
 
-    default:
-      throw new Error(`Unknown node type: ${(node as any).type}`);
+    default: {
+      const unknownNode = node as { type?: string };
+      const nodeType = unknownNode.type ?? "unknown";
+      throw new Error(`Unknown node type: ${nodeType}`);
+    }
   }
 }
 

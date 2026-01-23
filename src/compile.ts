@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { collectIdentifiers, generate, parse, type ASTNode } from "./parser";
 import type { CompileContext, CompiledData, Expression, ExprNode, Variable } from "./types";
 
@@ -12,6 +13,11 @@ export interface CompileOptions {
    */
   inline?: boolean;
 }
+
+/**
+ * 表达式上下文类型约束
+ */
+type ExpressionContext = Record<string, Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>>;
 
 /**
  * 将表达式树编译为可序列化的 JSON 结构
@@ -35,8 +41,8 @@ export interface CompileOptions {
  * ```
  */
 export function compile<TResult>(
-  expression: Expression<any, TResult>,
-  variables: Record<string, Variable<any>>,
+  expression: Expression<ExpressionContext, TResult>,
+  variables: Record<string, Variable<z.ZodType>>,
   options: CompileOptions = {}
 ): CompiledData {
   const { inline = true } = options;
@@ -48,12 +54,16 @@ export function compile<TResult>(
   };
 
   // 第一步：为每个表达式分配唯一 ID
-  const exprIdMap = new WeakMap<Expression<any, any>, symbol>();
-  const getExprId = (expr: Expression<any, any>): symbol => {
+  const exprIdMap = new WeakMap<Expression<Record<string, unknown>, unknown>, symbol>();
+  const getExprId = (expr: Expression<Record<string, unknown>, unknown>): symbol => {
     if (!exprIdMap.has(expr)) {
       exprIdMap.set(expr, Symbol("expr"));
     }
-    return exprIdMap.get(expr)!;
+    const id = exprIdMap.get(expr);
+    if (id === undefined) {
+      throw new Error("Expression ID not found");
+    }
+    return id;
   };
 
   // 为所有变量创建 node
@@ -75,7 +85,7 @@ export function compile<TResult>(
 
   // 第二步：递归收集所有依赖的节点，并检测循环依赖
   const exprNodes = new Map<symbol, ExprNode>();
-  const collectNodes = (expr: Expression<any, any>): ExprNode => {
+  const collectNodes = (expr: Expression<Record<string, unknown>, unknown>): ExprNode => {
     const exprId = getExprId(expr);
 
     if (visited.has(exprId)) {
@@ -92,7 +102,7 @@ export function compile<TResult>(
 
     // 收集表达式上下文中的所有节点
     for (const [key, contextItem] of Object.entries(expr.context)) {
-      const item = contextItem as Variable<any> | Expression<any, any>;
+      const item = contextItem as Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>;
       if (item._tag === "variable") {
         const varNode = variableNodes.get(key);
         if (!varNode) {

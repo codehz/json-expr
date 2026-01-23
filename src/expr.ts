@@ -1,10 +1,11 @@
+import { z } from "zod";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 import type { Expression, Variable } from "./types";
 
 /**
  * 表达式上下文类型约束
  */
-type ExprContext = Record<string, Variable<any> | Expression<any, any>>;
+type ExprContext = Record<string, Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>>;
 
 /**
  * 表达式错误类型
@@ -58,7 +59,7 @@ export function expr<TContext extends ExprContext>(
       _tag: "expression",
       context,
       source,
-      _type: undefined as any,
+      _type: undefined as unknown,
     } as Expression<TContext, ExprResult<Source, TContext>>;
   };
 }

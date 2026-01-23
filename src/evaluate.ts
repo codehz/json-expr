@@ -56,6 +56,7 @@ export function evaluate<TResult>(data: CompiledData, values: Record<string, unk
   if (!evaluator) {
     // 构造求值函数
     const functionBody = buildEvaluatorFunctionBody(expressions, variableNames.length);
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     evaluator = new Function("$values", functionBody) as (values: unknown[]) => unknown;
     evaluatorCache.set(cacheKey, evaluator);
   }

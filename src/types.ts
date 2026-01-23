@@ -61,11 +61,11 @@ export type InferVariableType<V> = V extends Variable<infer T> ? z.infer<T> : ne
  * @template C - 上下文对象类型
  */
 export type InferContextType<C> = {
-  [K in keyof C]: C[K] extends Variable<infer T> ? z.infer<T> : C[K] extends Expression<any, infer R> ? R : never;
+  [K in keyof C]: C[K] extends Variable<infer T> ? z.infer<T> : C[K] extends Expression<unknown, infer R> ? R : never;
 };
 
 /**
  * 从 Expression 推导结果类型
  * @template E - Expression 类型
  */
-export type InferExpressionType<E> = E extends Expression<any, infer R> ? R : never;
+export type InferExpressionType<E> = E extends Expression<unknown, infer R> ? R : never;

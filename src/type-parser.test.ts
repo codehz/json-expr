@@ -15,11 +15,11 @@ type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ?
 // ============================================================================
 
 test("类型测试：简单表达式的标识符提取", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
   // 验证表达式验证通过
-  type Context = { x: typeof x; y: typeof y };
+  type Context = { x: typeof _x; y: typeof _y };
   type Result = ValidateExpression<"x + y", Context>;
   type _test = Expect<Equal<Result, true>>;
 
@@ -27,9 +27,9 @@ test("类型测试：简单表达式的标识符提取", () => {
 });
 
 test("类型测试：检测未定义的标识符", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   type Result = ValidateExpression<"x + z", Context>;
 
   // 应该返回错误类型
@@ -39,9 +39,9 @@ test("类型测试：检测未定义的标识符", () => {
 });
 
 test("类型测试：跳过保留字和字面量", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   // true, false, null 等保留字应该被跳过
   type Result = ValidateExpression<"x > 0 ? true : false", Context>;
   type _test = Expect<Equal<Result, true>>;
@@ -54,10 +54,10 @@ test("类型测试：跳过保留字和字面量", () => {
 // ============================================================================
 
 test("类型测试：数字加法推导为 number", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  type Context = { x: typeof x; y: typeof y };
+  type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x + y", Context>;
   type _test = Expect<Equal<Result, number>>;
 
@@ -65,10 +65,10 @@ test("类型测试：数字加法推导为 number", () => {
 });
 
 test("类型测试：比较运算推导为 boolean", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  type Context = { x: typeof x; y: typeof y };
+  type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x > y", Context>;
   type _test = Expect<Equal<Result, boolean>>;
 
@@ -76,10 +76,10 @@ test("类型测试：比较运算推导为 boolean", () => {
 });
 
 test("类型测试：字符串加法推导为 string", () => {
-  const a = variable(z.string());
-  const b = variable(z.string());
+  const _a = variable(z.string());
+  const _b = variable(z.string());
 
-  type Context = { a: typeof a; b: typeof b };
+  type Context = { a: typeof _a; b: typeof _b };
   type Result = InferExpressionResult<"a + b", Context>;
   type _test = Expect<Equal<Result, string>>;
 
@@ -87,10 +87,10 @@ test("类型测试：字符串加法推导为 string", () => {
 });
 
 test("类型测试：乘法推导为 number", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  type Context = { x: typeof x; y: typeof y };
+  type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x * y", Context>;
   type _test = Expect<Equal<Result, number>>;
 
@@ -98,9 +98,9 @@ test("类型测试：乘法推导为 number", () => {
 });
 
 test("类型测试：逻辑非推导为 boolean", () => {
-  const x = variable(z.boolean());
+  const _x = variable(z.boolean());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   type Result = InferExpressionResult<"!x", Context>;
   type _test = Expect<Equal<Result, boolean>>;
 
@@ -108,9 +108,9 @@ test("类型测试：逻辑非推导为 boolean", () => {
 });
 
 test("类型测试：三元表达式推导为分支类型的联合", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   // x > 0 ? 1 : 0  =>  number | number => number
   type Result = InferExpressionResult<"x > 0 ? 1 : 0", Context>;
   type _test = Expect<Equal<Result, number>>;
@@ -123,79 +123,79 @@ test("类型测试：三元表达式推导为分支类型的联合", () => {
 // ============================================================================
 
 test("expr 函数返回正确推导的类型", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y");
+  const _sum = expr({ x: _x, y: _y })("x + y");
 
   // 验证类型推导
-  type SumType = typeof sum._type;
-  type _test = Expect<Equal<SumType, number>>;
+  type _SumType = typeof _sum._type;
+  type _test = Expect<Equal<_SumType, number>>;
 
-  expect(sum._tag).toBe("expression");
-  expect(sum.source).toBe("x + y");
+  expect(_sum._tag).toBe("expression");
+  expect(_sum.source).toBe("x + y");
 });
 
 test("expr 函数支持嵌套表达式", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y");
-  const doubled = expr({ sum })("sum * 2");
+  const _sum = expr({ x: _x, y: _y })("x + y");
+  const _doubled = expr({ sum: _sum })("sum * 2");
 
-  type DoubledType = typeof doubled._type;
-  type _test = Expect<Equal<DoubledType, number>>;
+  type _DoubledType = typeof _doubled._type;
+  type _test = Expect<Equal<_DoubledType, number>>;
 
-  expect(doubled.source).toBe("sum * 2");
+  expect(_doubled.source).toBe("sum * 2");
 });
 
 test("expr 函数正确推导比较表达式", () => {
-  const age = variable(z.number());
+  const _age = variable(z.number());
 
-  const isAdult = expr({ age })("age >= 18");
+  const _isAdult = expr({ age: _age })("age >= 18");
 
-  type IsAdultType = typeof isAdult._type;
-  type _test = Expect<Equal<IsAdultType, boolean>>;
+  type _IsAdultType = typeof _isAdult._type;
+  type _test = Expect<Equal<_IsAdultType, boolean>>;
 
-  expect(isAdult.source).toBe("age >= 18");
+  expect(_isAdult.source).toBe("age >= 18");
 });
 
 test("expr 函数正确推导复杂表达式", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
   // (x + y) * 2 - 1
-  const complex = expr({ x, y })("(x + y) * 2 - 1");
+  const _complex = expr({ x: _x, y: _y })("(x + y) * 2 - 1");
 
-  type ComplexType = typeof complex._type;
-  type _test = Expect<Equal<ComplexType, number>>;
+  type _ComplexType = typeof _complex._type;
+  type _test = Expect<Equal<_ComplexType, number>>;
 
-  expect(complex.source).toBe("(x + y) * 2 - 1");
+  expect(_complex.source).toBe("(x + y) * 2 - 1");
 });
 
 test("expr 函数正确推导逻辑表达式", () => {
-  const a = variable(z.boolean());
-  const b = variable(z.boolean());
+  const _a = variable(z.boolean());
+  const _b = variable(z.boolean());
 
-  const result = expr({ a, b })("a && b || !a");
+  const _result = expr({ a: _a, b: _b })("a && b || !a");
 
   // 逻辑表达式最终返回 boolean
-  type ResultType = typeof result._type;
+  type _ResultType = typeof _result._type;
   // && 和 || 的返回类型较复杂，但最终都是 boolean 相关
 
-  expect(result.source).toBe("a && b || !a");
+  expect(_result.source).toBe("a && b || !a");
 });
 
 test("expr 函数处理字符串表达式", () => {
-  const firstName = variable(z.string());
-  const lastName = variable(z.string());
+  const _firstName = variable(z.string());
+  const _lastName = variable(z.string());
 
-  const fullName = expr({ firstName, lastName })("firstName + lastName");
+  const _fullName = expr({ firstName: _firstName, lastName: _lastName })("firstName + lastName");
 
-  type FullNameType = typeof fullName._type;
-  type _test = Expect<Equal<FullNameType, string>>;
+  type _FullNameType = typeof _fullName._type;
+  type _test = Expect<Equal<_FullNameType, string>>;
 
-  expect(fullName.source).toBe("firstName + lastName");
+  expect(_fullName.source).toBe("firstName + lastName");
 });
 
 // ============================================================================
@@ -203,22 +203,22 @@ test("expr 函数处理字符串表达式", () => {
 // ============================================================================
 
 test("完整流程：类型推导 + 编译 + 执行", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
   // 类型自动推导
-  const sum = expr({ x, y })("x + y");
-  const isPositive = expr({ sum })("sum > 0");
+  const _sum = expr({ x: _x, y: _y })("x + y");
+  const _isPositive = expr({ sum: _sum })("sum > 0");
 
   // 验证类型
-  type SumType = typeof sum._type;
-  type IsPositiveType = typeof isPositive._type;
+  type _SumType = typeof _sum._type;
+  type _IsPositiveType = typeof _isPositive._type;
 
-  type _test1 = Expect<Equal<SumType, number>>;
-  type _test2 = Expect<Equal<IsPositiveType, boolean>>;
+  type _test1 = Expect<Equal<_SumType, number>>;
+  type _test2 = Expect<Equal<_IsPositiveType, boolean>>;
 
-  expect(sum._tag).toBe("expression");
-  expect(isPositive._tag).toBe("expression");
+  expect(_sum._tag).toBe("expression");
+  expect(_isPositive._tag).toBe("expression");
 });
 
 // ============================================================================
@@ -226,9 +226,9 @@ test("完整流程：类型推导 + 编译 + 执行", () => {
 // ============================================================================
 
 test("类型测试：空表达式处理", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   type Result = ValidateExpression<"", Context>;
 
   // 空表达式没有标识符需要验证，应该通过
@@ -238,9 +238,9 @@ test("类型测试：空表达式处理", () => {
 });
 
 test("类型测试：只有数字字面量", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   type Result = InferExpressionResult<"42", Context>;
   type _test = Expect<Equal<Result, number>>;
 
@@ -248,10 +248,10 @@ test("类型测试：只有数字字面量", () => {
 });
 
 test("类型测试：带括号的表达式", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const _x = variable(z.number());
+  const _y = variable(z.number());
 
-  type Context = { x: typeof x; y: typeof y };
+  type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"(x + y) * 2", Context>;
   type _test = Expect<Equal<Result, number>>;
 
@@ -259,9 +259,9 @@ test("类型测试：带括号的表达式", () => {
 });
 
 test("类型测试：一元负号", () => {
-  const x = variable(z.number());
+  const _x = variable(z.number());
 
-  type Context = { x: typeof x };
+  type Context = { x: typeof _x };
   type Result = InferExpressionResult<"-x", Context>;
   type _test = Expect<Equal<Result, number>>;
 
