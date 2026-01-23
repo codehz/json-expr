@@ -807,11 +807,23 @@ function needsParens(child: ASTNode, parent: ASTNode, position: string): boolean
     }
   }
 
-  // 一元表达式作为二元表达式右侧且运算符是 ** 时需要括号
+  // 二元表达式或条件表达式作为一元表达式的参数时需要括号
+  if (
+    (child.type === "BinaryExpr" || child.type === "ConditionalExpr") &&
+    parent.type === "UnaryExpr" &&
+    position === "argument"
+  ) {
+    return true;
+  }
+
+  // 一元表达式作为二元表达式的操作数时需要括号（为了保持原有的语义清晰）
   if (child.type === "UnaryExpr" && parent.type === "BinaryExpr") {
+    // ** 运算符左侧不能有一元表达式
     if (parent.operator === "**" && position === "left") {
       return true;
     }
+    // 逻辑运算符、位运算符等需要明确一元表达式的边界
+    return true;
   }
 
   return false;

@@ -108,6 +108,18 @@ test("parse: operator precedence", () => {
 
   // 比较运算符优先级
   expect(generate(parse("a + b < c + d"))).toBe("a+b<c+d");
+
+  // 逻辑非 ! 优先于逻辑与 &&
+  expect(generate(parse("!(a && b)"))).toBe("!(a&&b)");
+  expect(generate(parse("!a && b"))).toBe("(!a)&&b");
+
+  // 逻辑非 ! 优先于逻辑或 ||
+  expect(generate(parse("!(a || b)"))).toBe("!(a||b)");
+  expect(generate(parse("!a || b"))).toBe("(!a)||b");
+
+  // 多个逻辑非
+  expect(generate(parse("!!a"))).toBe("!!a");
+  expect(generate(parse("!a && !b"))).toBe("(!a)&&(!b)");
 });
 
 test("parse: right associativity", () => {
