@@ -343,19 +343,51 @@ function inlineTransform(
 }
 
 /**
+ * 允许在表达式中直接使用的全局对象
+ * 这些对象不需要在上下文中定义
+ */
+const ALLOWED_GLOBALS = new Set([
+  // Math 对象及其方法
+  "Math",
+  // JSON 对象
+  "JSON",
+  // 基本类型构造函数
+  "Number",
+  "String",
+  "Boolean",
+  "Array",
+  "Object",
+  // 其他常用全局对象
+  "Date",
+  "RegExp",
+  // 全局值
+  "undefined",
+  "NaN",
+  "Infinity",
+  // 类型检查
+  "isNaN",
+  "isFinite",
+  "parseInt",
+  "parseFloat",
+])
+
+/**
  * 从表达式源码中提取所有使用的变量名
  * 通过 AST 解析实现精确提取
+ * 排除允许的全局对象
  *
  * @param source - 表达式源码字符串
- * @returns 使用的变量名列表（去重）
+ * @returns 使用的变量名列表（去重，不含全局对象）
  *
  * @example
  * ```ts
  * extractVariableNames("x + y * Math.PI")
- * // => ["x", "y", "Math"]
+ * // => ["x", "y"]  // Math 被排除
  * ```
  */
 function extractVariableNames(source: string): string[] {
   const ast = parse(source)
-  return Array.from(collectIdentifiers(ast))
+  const identifiers = collectIdentifiers(ast)
+  // 过滤掉允许的全局对象
+  return Array.from(identifiers).filter(name => !ALLOWED_GLOBALS.has(name))
 }
