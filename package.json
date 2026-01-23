@@ -21,7 +21,7 @@
     "url": "https://github.com/codehz/json-expr.git"
   },
   "scripts": {
-    "prepare": "husky",
+    "prepare": "husky || exit 0",
     "build": "tsdown",
     "release": "bun run build",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
