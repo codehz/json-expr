@@ -2,6 +2,10 @@
   "name": "@codehz/json-expr",
   "module": "src/index.ts",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codehz/json-expr.git"
+  },
   "scripts": {
     "prepare": "husky",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
