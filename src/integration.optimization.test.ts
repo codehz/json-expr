@@ -1,73 +1,157 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
-test("集成测试：内联优化（默认开启）", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+describe("集成测试：编译优化", () => {
+  describe("内联优化", () => {
+    test("单次引用的表达式被内联", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
 
-  const sum = expr({ x, y })("x + y");
-  const product = expr({ x, y })("x * y");
-  const result = expr({ sum, product })("sum + product");
+      const sum = expr({ x, y })("x + y");
+      const product = expr({ x, y })("x * y");
+      const result = expr({ sum, product })("sum + product");
 
-  // 默认编译（内联优化）
-  const optimized = compile(result, { x, y });
-  // 内联优化后只剩一个表达式（sum 和 product 都只被引用一次）
-  expect(optimized.length).toBe(2); // [变量名, 内联后的表达式]
+      // 默认开启内联优化
+      const optimized = compile(result, { x, y });
+      // 内联后只剩一个表达式
+      expect(optimized.length).toBe(2); // [变量名, 表达式]
+      expect(optimized[0]).toEqual(["x", "y"]);
 
-  // 不内联编译
-  const unoptimized = compile(result, { x, y }, { inline: false });
-  expect(unoptimized.length).toBe(4); // [变量名, expr1, expr2, expr3]
+      // 禁用内联
+      const unoptimized = compile(result, { x, y }, { inline: false });
+      // 未内联有 4 个元素
+      expect(unoptimized.length).toBe(4); // [变量名, sum, product, result]
 
-  // 执行结果一致
-  const value1 = evaluate<number>(optimized, { x: 2, y: 3 });
-  const value2 = evaluate<number>(unoptimized, { x: 2, y: 3 });
-  expect(value1).toBe(11);
-  expect(value2).toBe(11);
-});
+      // 两者执行结果一致
+      const values = { x: 2, y: 3 };
+      const resultOptimized = evaluate<number>(optimized, values);
+      const resultUnoptimized = evaluate<number>(unoptimized, values);
+      expect(resultOptimized).toBe(11); // 2+3 + 2*3 = 5+6 = 11
+      expect(resultUnoptimized).toBe(11);
+    });
 
-test("集成测试：内联优化对比", () => {
-  const p = variable(z.number());
-  const q = variable(z.number());
-  const r = variable(z.number());
+    test("多次引用的表达式处理", () => {
+      const x = variable(z.number());
 
-  const expr1 = expr({ p, q })("p + q");
-  const expr2 = expr({ q, r })("q * r");
-  const expr3 = expr({ expr1, expr2 })("expr1 + expr2");
+      // sum 被引用两次
+      const sum = expr({ x })("x + 1");
+      const result = expr({ sum })("sum * sum");
 
-  // 不内联编译
-  const unoptimized = compile(expr3, { p, q, r }, { inline: false });
+      const optimized = compile(result, { x });
+      const unoptimized = compile(result, { x }, { inline: false });
 
-  // 默认编译（内联优化）
-  const optimized = compile(expr3, { p, q, r });
+      // 执行结果正确
+      const valueOptimized = evaluate<number>(optimized, { x: 2 });
+      const valueUnoptimized = evaluate<number>(unoptimized, { x: 2 });
+      expect(valueOptimized).toBe(9); // (2+1)*(2+1) = 3*3 = 9
+      expect(valueUnoptimized).toBe(9);
+    });
 
-  // 验证内联优化后的表达式数量减少
-  expect(optimized.length).toBeLessThan(unoptimized.length);
+    test("部分内联：混合单次和多次引用", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
 
-  // 执行并验证结果正确
-  const result = evaluate<number>(optimized, { p: 2, q: 3, r: 4 });
-  // (2+3) + (3*4) = 5 + 12 = 17
-  expect(result).toBe(17);
-});
+      const a = expr({ x })("x + 1"); // 被引用一次
+      const b = expr({ y })("y * 2"); // 被引用两次
+      const result = expr({ a, b })("a + b * b");
 
-test("集成测试：内联与非内联结果一致性", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
-  const zVar = variable(z.number());
+      const optimized = compile(result, { x, y });
+      const unoptimized = compile(result, { x, y }, { inline: false });
 
-  const e1 = expr({ x, y })("x * y");
-  const e2 = expr({ y, zVar })("y + zVar");
-  const e3 = expr({ e1, e2 })("e1 + e2");
+      // a 被内联，b 不被内联
+      expect(optimized.length).toBeLessThan(unoptimized.length);
 
-  const optimized = compile(e3, { x, y, zVar }); // 默认内联
-  const unoptimized = compile(e3, { x, y, zVar }, { inline: false });
+      // 执行结果一致
+      const values = { x: 1, y: 2 };
+      expect(evaluate<number>(optimized, values)).toBe(evaluate<number>(unoptimized, values));
+      // (1+1) + (2*2)*(2*2) = 2 + 4*4 = 2 + 16 = 18
+      expect(evaluate<number>(optimized, values)).toBe(18);
+    });
+  });
 
-  const testValue = { x: 2, y: 3, zVar: 4 };
-  const resultOptimized = evaluate<number>(optimized, testValue);
-  const resultUnoptimized = evaluate<number>(unoptimized, testValue);
+  describe("复杂表达式优化", () => {
+    test("深层嵌套表达式优化", () => {
+      const x = variable(z.number());
 
-  // 2*3 + (3+4) = 6 + 7 = 13
-  expect(resultOptimized).toBe(13);
-  expect(resultUnoptimized).toBe(13);
-  expect(resultOptimized).toBe(resultUnoptimized);
+      const e1 = expr({ x })("x + 1");
+      const e2 = expr({ e1 })("e1 * 2");
+      const e3 = expr({ e2 })("e2 - 3");
+      const e4 = expr({ e3 })("e3 / 2");
+
+      const optimized = compile(e4, { x });
+      const unoptimized = compile(e4, { x }, { inline: false });
+
+      // 所有表达式都只被引用一次，应该完全内联
+      expect(optimized.length).toBe(2);
+      expect(unoptimized.length).toBe(5);
+
+      // 执行结果一致
+      const values = { x: 5 };
+      const expected = ((5 + 1) * 2 - 3) / 2; // (6*2-3)/2 = 9/2 = 4.5
+      expect(evaluate<number>(optimized, values)).toBe(expected);
+      expect(evaluate<number>(unoptimized, values)).toBe(expected);
+    });
+
+    test("分支共享的表达式", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
+
+      // base 被两个分支共享
+      const base = expr({ x, y })("x + y");
+      const left = expr({ base })("base * 2");
+      const right = expr({ base })("base * 3");
+      const result = expr({ left, right })("left + right");
+
+      const optimized = compile(result, { x, y });
+      const unoptimized = compile(result, { x, y }, { inline: false });
+
+      // base 被引用两次，不应被内联
+      // left 和 right 各被引用一次，应该被内联
+      expect(optimized.length).toBeLessThan(unoptimized.length);
+
+      // 执行结果一致
+      const values = { x: 1, y: 2 };
+      // base = 3, left = 6, right = 9, result = 15
+      expect(evaluate<number>(optimized, values)).toBe(15);
+      expect(evaluate<number>(unoptimized, values)).toBe(15);
+    });
+  });
+
+  describe("优化正确性验证", () => {
+    test("各种数值范围", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
+
+      const e = expr({ x, y })("x * y + x / y");
+      const optimized = compile(e, { x, y });
+      const unoptimized = compile(e, { x, y }, { inline: false });
+
+      const testCases = [
+        { x: 0, y: 1 },
+        { x: 1, y: 1 },
+        { x: -5, y: 3 },
+        { x: 100, y: 0.01 },
+        { x: Number.MAX_SAFE_INTEGER, y: 1 },
+        { x: Number.MIN_SAFE_INTEGER, y: -1 },
+      ];
+
+      for (const values of testCases) {
+        const expected = values.x * values.y + values.x / values.y;
+        expect(evaluate<number>(optimized, values)).toBe(expected);
+        expect(evaluate<number>(unoptimized, values)).toBe(expected);
+      }
+    });
+
+    test("特殊数值处理", () => {
+      const x = variable(z.number());
+
+      const e = expr({ x })("x + 1");
+      const compiled = compile(e, { x });
+
+      expect(evaluate<number>(compiled, { x: Infinity })).toBe(Infinity);
+      expect(evaluate<number>(compiled, { x: -Infinity })).toBe(-Infinity);
+      expect(Number.isNaN(evaluate<number>(compiled, { x: NaN }))).toBe(true);
+    });
+  });
 });

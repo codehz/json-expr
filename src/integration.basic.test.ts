@@ -1,100 +1,230 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
-test("集成测试：完整的表达式流程", () => {
-  // 定义变量
-  const x = variable(z.number());
-  const y = variable(z.number());
+describe("集成测试：基础表达式", () => {
+  describe("变量与表达式组合", () => {
+    test("多层嵌套表达式", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+      const c = variable(z.number());
 
-  // 构建表达式
-  const sum = expr({ x, y })("x + y");
-  const product = expr({ x, y })("x * y");
-  const result = expr({ sum, product })("sum + product");
+      const layer1 = expr({ a, b })("a + b");
+      const layer2 = expr({ layer1, c })("layer1 * c");
+      const layer3 = expr({ layer2 })("layer2 + 1");
 
-  // 编译（默认内联优化）
-  const data = compile(result, { x, y });
-  expect(data[0]).toEqual(["x", "y"]);
-  expect(data.length).toBe(2); // 变量名 + 内联后的单个表达式
+      const compiled = compile(layer3, { a, b, c });
 
-  // 执行
-  const value = evaluate<number>(data, { x: 2, y: 3 });
-  expect(value).toBe(11); // 2+3 + 2*3 = 5 + 6 = 11
-});
+      expect(compiled[0]).toEqual(["a", "b", "c"]);
+      expect(evaluate<number>(compiled, { a: 2, b: 3, c: 4 })).toBe(21); // (2+3)*4+1
+    });
 
-test("集成测试：基础变量和表达式", () => {
-  const a = variable(z.number());
-  const b = variable(z.number());
+    test("链式计算", () => {
+      const x = variable(z.number());
 
-  const simple = expr({ a, b })("a + b");
-  const compiled = compile(simple, { a, b });
+      const expr1 = expr({ x })("x + 1");
+      const expr2 = expr({ expr1 })("expr1 * 2");
+      const expr3 = expr({ expr2 })("expr2 - 3");
 
-  const result = evaluate<number>(compiled, { a: 10, b: 20 });
-  expect(result).toBe(30);
-});
+      const compiled = compile(expr3, { x });
+      expect(evaluate<number>(compiled, { x: 5 })).toBe(9); // ((5+1)*2)-3
+    });
 
-test("集成测试：多层嵌套表达式", () => {
-  const a = variable(z.number());
-  const b = variable(z.number());
-  const c = variable(z.number());
+    test("引用不存在的表达式变量应该报错", () => {
+      const x = variable(z.number());
 
-  const layer1 = expr({ a, b })("a + b");
-  const layer2 = expr({ layer1, c })("layer1 * c");
-  const layer3 = expr({ layer2 })("layer2 + 1");
+      const expr1 = expr({ x })("x + 1");
+      const expr2 = expr({ expr1 })("expr1 * 2");
+      // 错误：引用 expr3 而不是 expr2
+      const expr3 = expr({ expr2 })("expr3 - 3");
 
-  const compiled = compile(layer3, { a, b, c });
+      expect(() => compile(expr3, { x })).toThrow();
+    });
+  });
 
-  // 验证编译结果的结构
-  expect(compiled[0]).toEqual(["a", "b", "c"]);
+  describe("运算符优先级", () => {
+    test("乘法优先于加法", () => {
+      const p = variable(z.number());
+      const q = variable(z.number());
 
-  // 执行
-  const result = evaluate<number>(compiled, { a: 2, b: 3, c: 4 });
-  // (2+3) * 4 + 1 = 5 * 4 + 1 = 20 + 1 = 21
-  expect(result).toBe(21);
-});
+      const calc = expr({ p, q })("p + q * 2");
+      const compiled = compile(calc, { p, q });
+      expect(evaluate<number>(compiled, { p: 10, q: 5 })).toBe(20); // 10 + 5*2
+    });
 
-test("集成测试：连续算术运算", () => {
-  const x = variable(z.number());
+    test("括号改变优先级", () => {
+      const p = variable(z.number());
+      const q = variable(z.number());
 
-  const expr1 = expr({ x })("x + 1");
-  const expr2 = expr({ expr1 })("expr1 * 2");
-  const expr3 = expr({ expr2 })("expr3 - 3");
+      const calc = expr({ p, q })("(p + q) * 2");
+      const compiled = compile(calc, { p, q });
+      expect(evaluate<number>(compiled, { p: 10, q: 5 })).toBe(30); // (10+5)*2
+    });
 
-  // 此处应该捕获错误：expr3 在上下文中不存在
-  expect(() => {
-    compile(expr3, { x });
-  }).toThrow();
-});
+    test("复杂运算符组合", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+      const c = variable(z.number());
 
-test("集成测试：正确的链式计算", () => {
-  const x = variable(z.number());
+      const calc = expr({ a, b, c })("a * b + c / 2 - a % b");
+      const compiled = compile(calc, { a, b, c });
+      // 2*3 + 10/2 - 2%3 = 6 + 5 - 2 = 9
+      expect(evaluate<number>(compiled, { a: 2, b: 3, c: 10 })).toBe(9);
+    });
+  });
 
-  const expr1 = expr({ x })("x + 1");
-  const expr2 = expr({ expr1 })("expr1 * 2");
-  const expr3 = expr({ expr2 })("expr2 - 3");
+  describe("类型混合", () => {
+    test("字符串拼接", () => {
+      const a = variable(z.string());
+      const b = variable(z.string());
 
-  const compiled = compile(expr3, { x });
-  const result = evaluate<number>(compiled, { x: 5 });
-  // ((5+1)*2) - 3 = (6*2) - 3 = 12 - 3 = 9
-  expect(result).toBe(9);
-});
+      const combined = expr({ a, b })("a + b");
+      const compiled = compile(combined, { a, b });
+      expect(evaluate<string>(compiled, { a: "Hello", b: "World" })).toBe("HelloWorld");
+    });
 
-test("集成测试：简单字符串表达式", () => {
-  const a = variable(z.string());
-  const b = variable(z.string());
+    test("数字与字符串混合拼接", () => {
+      const str = variable(z.string());
+      const num = variable(z.number());
 
-  const combined = expr({ a, b })("a + b");
-  const compiled = compile(combined, { a, b });
-  const result = evaluate<string>(compiled, { a: "Hello", b: "World" });
-  expect(result).toBe("HelloWorld");
-});
+      const combined = expr({ str, num })('str + ": " + num');
+      const compiled = compile(combined, { str, num });
+      expect(evaluate<string>(compiled, { str: "Count", num: 42 })).toBe("Count: 42");
+    });
+  });
 
-test("集成测试：数字类型保持一致", () => {
-  const p = variable(z.number());
-  const q = variable(z.number());
+  describe("一元运算符", () => {
+    test("负号", () => {
+      const x = variable(z.number());
+      const negated = expr({ x })("-x");
+      const compiled = compile(negated, { x });
+      expect(evaluate<number>(compiled, { x: 5 })).toBe(-5);
+      expect(evaluate<number>(compiled, { x: -3 })).toBe(3);
+    });
 
-  const calc = expr({ p, q })("p + q * 2");
-  const compiled = compile(calc, { p, q });
-  const result = evaluate<number>(compiled, { p: 10, q: 5 });
-  expect(result).toBe(20); // 10 + 5*2 = 10 + 10 = 20
+    test("逻辑非", () => {
+      const flag = variable(z.boolean());
+      const notFlag = expr({ flag })("!flag");
+      const compiled = compile(notFlag, { flag });
+      expect(evaluate<boolean>(compiled, { flag: true })).toBe(false);
+      expect(evaluate<boolean>(compiled, { flag: false })).toBe(true);
+    });
+
+    test("双重否定", () => {
+      const flag = variable(z.boolean());
+      const doubleNot = expr({ flag })("!!flag");
+      const compiled = compile(doubleNot, { flag });
+      expect(evaluate<boolean>(compiled, { flag: true })).toBe(true);
+      expect(evaluate<boolean>(compiled, { flag: false })).toBe(false);
+    });
+
+    test("typeof 运算符", () => {
+      const x = variable(z.number());
+      const typeExpr = expr({ x })("typeof x");
+      const compiled = compile(typeExpr, { x });
+      expect(evaluate<string>(compiled, { x: 42 })).toBe("number");
+    });
+  });
+
+  describe("幂运算", () => {
+    test("基础幂运算", () => {
+      const base = variable(z.number());
+      const exp = variable(z.number());
+
+      const power = expr({ base, exp })("base ** exp");
+      const compiled = compile(power, { base, exp });
+      expect(evaluate<number>(compiled, { base: 2, exp: 10 })).toBe(1024);
+    });
+
+    test("幂运算右结合", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+      const c = variable(z.number());
+
+      // 2 ** 3 ** 2 = 2 ** 9 = 512 (右结合)
+      const power = expr({ a, b, c })("a ** b ** c");
+      const compiled = compile(power, { a, b, c });
+      expect(evaluate<number>(compiled, { a: 2, b: 3, c: 2 })).toBe(512);
+    });
+  });
+
+  describe("位运算", () => {
+    test("按位与、或、异或", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+
+      const andExpr = expr({ a, b })("a & b");
+      const orExpr = expr({ a, b })("a | b");
+      const xorExpr = expr({ a, b })("a ^ b");
+
+      const andCompiled = compile(andExpr, { a, b });
+      const orCompiled = compile(orExpr, { a, b });
+      const xorCompiled = compile(xorExpr, { a, b });
+
+      // 5 = 0101, 3 = 0011
+      expect(evaluate<number>(andCompiled, { a: 5, b: 3 })).toBe(1); // 0001
+      expect(evaluate<number>(orCompiled, { a: 5, b: 3 })).toBe(7); // 0111
+      expect(evaluate<number>(xorCompiled, { a: 5, b: 3 })).toBe(6); // 0110
+    });
+
+    test("按位取反", () => {
+      const x = variable(z.number());
+      const notExpr = expr({ x })("~x");
+      const compiled = compile(notExpr, { x });
+      expect(evaluate<number>(compiled, { x: 5 })).toBe(-6); // ~5 = -6
+    });
+
+    test("位移运算", () => {
+      const x = variable(z.number());
+      const n = variable(z.number());
+
+      const leftShift = expr({ x, n })("x << n");
+      const rightShift = expr({ x, n })("x >> n");
+      const unsignedRightShift = expr({ x, n })("x >>> n");
+
+      const leftCompiled = compile(leftShift, { x, n });
+      const rightCompiled = compile(rightShift, { x, n });
+      const unsignedCompiled = compile(unsignedRightShift, { x, n });
+
+      expect(evaluate<number>(leftCompiled, { x: 5, n: 2 })).toBe(20); // 5 << 2 = 20
+      expect(evaluate<number>(rightCompiled, { x: 20, n: 2 })).toBe(5); // 20 >> 2 = 5
+      expect(evaluate<number>(unsignedCompiled, { x: -1, n: 0 })).toBe(4294967295); // -1 >>> 0
+    });
+  });
+
+  describe("数组和对象字面量", () => {
+    test("数组字面量", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+
+      const arr = expr({ a, b })("[a, b, a + b]");
+      const compiled = compile(arr, { a, b });
+      expect(evaluate<number[]>(compiled, { a: 1, b: 2 })).toEqual([1, 2, 3]);
+    });
+
+    test("对象字面量", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
+
+      const obj = expr({ x, y })("{ a: x, b: y, sum: x + y }");
+      const compiled = compile(obj, { x, y });
+      expect(evaluate<{ a: number; b: number; sum: number }>(compiled, { x: 1, y: 2 })).toEqual({
+        a: 1,
+        b: 2,
+        sum: 3,
+      });
+    });
+
+    test("嵌套数组和对象", () => {
+      const a = variable(z.number());
+      const b = variable(z.string());
+
+      const nested = expr({ a, b })("{ arr: [a, a * 2], name: b }");
+      const compiled = compile(nested, { a, b });
+      expect(evaluate<{ arr: number[]; name: string }>(compiled, { a: 5, b: "test" })).toEqual({
+        arr: [5, 10],
+        name: "test",
+      });
+    });
+  });
 });

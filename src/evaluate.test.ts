@@ -1,112 +1,67 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { compile } from "./compile";
-import { evaluate } from "./evaluate";
-import { expr } from "./expr";
-import { variable } from "./variable";
+import { compile, evaluate, expr, variable } from "./index";
 
-test("evaluate: simple arithmetic expression", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+describe("evaluate 单元测试", () => {
+  describe("缓存机制", () => {
+    test("重复调用使用缓存的求值函数", () => {
+      const x = variable(z.number());
+      const sum = expr({ x })("x + 1");
+      const compiled = compile(sum, { x });
 
-  const sum = expr({ x, y })("x + y");
-  const compiled = compile(sum, { x, y });
+      // 多次调用应该返回正确结果
+      expect(evaluate<number>(compiled, { x: 5 })).toBe(6);
+      expect(evaluate<number>(compiled, { x: 10 })).toBe(11);
+      expect(evaluate<number>(compiled, { x: 0 })).toBe(1);
+      expect(evaluate<number>(compiled, { x: -5 })).toBe(-4);
+    });
+  });
 
-  const result = evaluate<number>(compiled, { x: 2, y: 3 });
-  expect(result).toBe(5);
-});
+  describe("错误处理", () => {
+    test("缺少必需变量时抛出错误", () => {
+      const x = variable(z.number());
+      const y = variable(z.number());
 
-test("evaluate: nested expressions", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+      const sum = expr({ x, y })("x + y");
+      const compiled = compile(sum, { x, y });
 
-  const sum = expr({ x, y })("x + y");
-  const product = expr({ x, y })("x * y");
-  const result_expr = expr({ sum, product })("sum + product");
+      expect(() => {
+        evaluate<number>(compiled, { x: 2 });
+      }).toThrow("Missing required variable: y");
+    });
 
-  const compiled = compile(result_expr, { x, y });
-  // [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+    test("缺少多个变量时报告第一个", () => {
+      const a = variable(z.number());
+      const b = variable(z.number());
+      const c = variable(z.number());
 
-  const result = evaluate<number>(compiled, { x: 2, y: 3 });
-  // 2 + 3 = 5, 2 * 3 = 6, 5 + 6 = 11
-  expect(result).toBe(11);
-});
+      const e = expr({ a, b, c })("a + b + c");
+      const compiled = compile(e, { a, b, c });
 
-test("evaluate: complex expression with multiple operations", () => {
-  const x = variable(z.number());
+      expect(() => {
+        evaluate<number>(compiled, {});
+      }).toThrow("Missing required variable:");
+    });
+  });
 
-  const double = expr({ x })("x * 2");
-  const add_one = expr({ double })("double + 1");
-  const square = expr({ add_one })("add_one * add_one");
+  describe("边界情况", () => {
+    test("空变量列表", () => {
+      // 常量表达式
+      const e = expr({})("1 + 2");
+      const compiled = compile(e, {});
+      expect(evaluate<number>(compiled, {})).toBe(3);
+    });
 
-  const compiled = compile(square, { x });
-  // [["x"], "x*2", "double+1", "add_one*add_one"]
+    test("undefined 和 null 值", () => {
+      const x = variable(z.union([z.number(), z.null(), z.undefined()]));
+      const y = variable(z.number());
 
-  const result = evaluate<number>(compiled, { x: 3 });
-  // 3 * 2 = 6, 6 + 1 = 7, 7 * 7 = 49
-  expect(result).toBe(49);
-});
+      const e = expr({ x, y })("x ?? y");
+      const compiled = compile(e, { x, y });
 
-test("evaluate: expression with string concatenation", () => {
-  const x = variable(z.string());
-  const y = variable(z.string());
-
-  const expr_xy = expr({ x, y })("x + y");
-  const compiled = compile(expr_xy, { x, y });
-
-  const result = evaluate<string>(compiled, { x: "Hello", y: " World" });
-  expect(result).toBe("Hello World");
-});
-
-test("evaluate: missing required variable throws error", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
-
-  const sum = expr({ x, y })("x + y");
-  const compiled = compile(sum, { x, y });
-
-  expect(() => {
-    evaluate<number>(compiled, { x: 2 });
-  }).toThrow("Missing required variable: y");
-});
-
-test("evaluate: caches evaluator functions", () => {
-  const x = variable(z.number());
-  const sum = expr({ x })("x + 1");
-  const compiled = compile(sum, { x });
-
-  // First call constructs the function
-  const result1 = evaluate<number>(compiled, { x: 5 });
-  expect(result1).toBe(6);
-
-  // Second call should use cached function
-  const result2 = evaluate<number>(compiled, { x: 10 });
-  expect(result2).toBe(11);
-});
-
-test("evaluate: works with complex numeric expressions", () => {
-  const a = variable(z.number());
-  const b = variable(z.number());
-  const c = variable(z.number());
-
-  const expr_abc = expr({ a, b, c })("a * b + c / 2");
-  const compiled = compile(expr_abc, { a, b, c });
-
-  const result = evaluate<number>(compiled, { a: 2, b: 3, c: 10 });
-  // 2 * 3 + 10 / 2 = 6 + 5 = 11
-  expect(result).toBe(11);
-});
-
-test("evaluate: works with boolean expressions", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
-
-  const comparison = expr({ x, y })("x > y");
-  const compiled = compile(comparison, { x, y });
-
-  const result1 = evaluate<boolean>(compiled, { x: 5, y: 3 });
-  expect(result1).toBe(true);
-
-  const result2 = evaluate<boolean>(compiled, { x: 2, y: 3 });
-  expect(result2).toBe(false);
+      expect(evaluate<number>(compiled, { x: null, y: 10 })).toBe(10);
+      expect(evaluate<number>(compiled, { x: undefined, y: 10 })).toBe(10);
+      expect(evaluate<number>(compiled, { x: 5, y: 10 })).toBe(5);
+    });
+  });
 });
