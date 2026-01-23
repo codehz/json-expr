@@ -152,7 +152,7 @@ function buildEvaluatorFunctionBodyV2(expressions: CompiledExpression[], variabl
   lines.push(`  switch ($pc) {`);
 
   for (let i = 0; i < expressions.length; i++) {
-    const expr = expressions[i];
+    const expr = expressions[i]!;
     const idx = variableCount + i;
 
     lines.push(`    case ${i}: {`);
