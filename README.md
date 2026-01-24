@@ -760,33 +760,18 @@ const discount = evaluate(rule, {
 
 ```
 src/
-├── index.ts                      # 导出入口
-├── variable.ts                   # variable<T>() 函数
-├── expr.ts                       # expr() 函数
-├── template.ts                   # t() 标签模板函数
-├── lambda.ts                     # lambda() 函数（数组方法支持）
-├── compile.ts                    # 编译器（内联优化、短路求值）
-├── evaluate.ts                   # 运行时求值
-├── parser.ts                     # 表达式 AST 解析器
-├── type-parser.ts                # TypeScript 类型级表达式解析
-├── proxy-variable.ts             # Proxy 变量实现
-├── proxy-metadata.ts             # Proxy 元数据管理
-├── types.ts                      # 类型定义（Variable、Expression、Lambda 等）
-├── compile.test.ts               # 编译器单元测试
-├── evaluate.test.ts              # 求值器单元测试
-├── parser.test.ts                # 解析器单元测试
-├── type-parser.test.ts           # 类型解析器单元测试
-├── proxy-variable.test.ts        # Proxy 变量单元测试
-├── lambda.test.ts                # Lambda 表达式测试
-├── integration.basic.test.ts     # 基础表达式集成测试
-├── integration.boolean.test.ts   # 布尔表达式测试
-├── integration.math.test.ts      # Math 函数测试
-├── integration.functions.test.ts # 函数调用测试
-├── integration.objects.test.ts   # 对象属性访问测试
-├── integration.objects-direct.test.ts # 直接编译对象/数组测试
-├── integration.short-circuit.test.ts  # 短路求值测试
-├── integration.optimization.test.ts   # 编译优化测试
-└── integration.complex.test.ts   # 复杂表达式组合测试
+├── index.ts          # 导出入口
+├── variable.ts       # variable<T>() 函数
+├── expr.ts           # expr() 函数
+├── template.ts       # t() 标签模板函数
+├── lambda.ts         # lambda() 函数（数组方法支持）
+├── compile.ts        # 编译器（内联优化、短路求值）
+├── evaluate.ts       # 运行时求值
+├── parser.ts         # 表达式 AST 解析器
+├── type-parser.ts    # TypeScript 类型级表达式解析
+├── proxy-variable.ts # Proxy 变量实现
+├── proxy-metadata.ts # Proxy 元数据管理
+└── types.ts          # 类型定义（Variable、Expression、Lambda 等）
 ```
 
 ## 开发
