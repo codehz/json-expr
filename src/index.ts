@@ -6,6 +6,7 @@ export { lambda } from "./lambda";
 export { isProxy, isProxyExpression, isProxyVariable } from "./proxy-metadata";
 export { t } from "./template";
 export { getVariableId, variable } from "./variable";
+export { wrap } from "./wrap";
 
 // 类型导出
 export type {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, variable } from "./index";
+import { compile, evaluate, variable, wrap } from "./index";
 import { generate } from "./parser";
 import { serializeArgumentToAST } from "./proxy-variable";
 
@@ -53,6 +53,16 @@ describe("内置类型序列化测试", () => {
       },
     });
     expect(evalResult).toBe(true);
+  });
+
+  test("使用 wrap 编译 RegExp 参数", () => {
+    const pattern = wrap(/^[a-z]+$/i);
+    const input = variable<string>();
+    const result = pattern.test(input);
+
+    const compiled = compile(result, { input });
+    expect(evaluate<boolean>(compiled, { input: "hello" })).toBe(true);
+    expect(evaluate<boolean>(compiled, { input: "hello123" })).toBe(false);
   });
 
   test("序列化 BigInt", () => {

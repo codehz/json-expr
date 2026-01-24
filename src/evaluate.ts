@@ -29,7 +29,7 @@ function isV2Format(expressions: CompiledExpression[]): boolean {
  * // => 6  (3 * 2)
  * ```
  */
-export function evaluate<TResult>(data: CompiledData, values: Record<string, unknown>): TResult {
+export function evaluate<TResult = unknown>(data: CompiledData, values: Record<string, unknown>): TResult {
   if (data.length < 1) {
     throw new Error("Invalid compiled data: must have at least variable names");
   }

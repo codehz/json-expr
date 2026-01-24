@@ -28,7 +28,7 @@ bun install @codehz/json-expr
 ### 基本用法
 
 ```typescript
-import { variable, expr, compile, evaluate, t, lambda } from "@codehz/json-expr";
+import { variable, expr, compile, evaluate, t, lambda, wrap } from "@codehz/json-expr";
 
 // 定义类型化变量（使用 TypeScript 泛型）
 const x = variable<number>();
@@ -54,6 +54,11 @@ const greeting = t`Hello, ${name}!`;
 // 使用 lambda 表达式
 const numbers = variable<number[]>();
 const doubled = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
+
+// 使用 wrap 包装静态值
+const pattern = wrap(/^[a-z]+$/i);
+const input = variable<string>();
+const isValid = pattern.test(input);
 ```
 
 ## 核心概念
@@ -260,7 +265,151 @@ const multiplier = variable<number>();
 const scaled = numbers.map(lambda<[number], number>((n) => expr({ n, multiplier })("n * multiplier")));
 ```
 
+### `wrap<T>(value: T): Proxify<T>`
+
+将静态值包装为 Proxy Expression，使其可以像 Variable 一样调用方法和访问属性。
+
+**参数：**
+
+- `value` - 要包装的静态值（支持原始值、对象、数组、Date、RegExp、BigInt、URL、Map、Set、TypedArray 等）
+
+**返回值：** Proxy Expression，可以继续链式调用
+
+**示例：**
+
+```typescript
+// 包装 RegExp
+const pattern = wrap(/^[a-z]+$/i);
+const input = variable<string>();
+const isValid = pattern.test(input);
+
+const compiled = compile(isValid, { input });
+evaluate(compiled, { input: "hello" }); // => true
+evaluate(compiled, { input: "hello123" }); // => false
+
+// 包装 Date
+const now = wrap(new Date("2024-01-01"));
+const year = now.getFullYear();
+
+// 包装数组
+const staticNumbers = wrap([1, 2, 3, 4, 5]);
+const x = variable<number>();
+const doubled = staticNumbers.map(lambda((n: number) => expr({ n, x })("n * x")));
+
+// 包装对象
+const config = wrap({ port: 8080, host: "localhost" });
+const port = config.port; // 直接访问属性
+
+// 包装 Map
+const map = wrap(
+  new Map([
+    ["a", 1],
+    ["b", 2],
+  ])
+);
+const key = variable<string>();
+const value = map.get(key);
+
+// 链式调用
+const text = wrap("  hello world  ");
+const result = text.trim().toUpperCase().replace("HELLO", "HI");
+// => "HI WORLD"
+```
+
 ## 高级用法
+
+### 包装静态值（wrap）
+
+`wrap()` 函数可以将任意静态值转换为 Proxy Expression，使其可以像 Variable 一样调用方法和访问属性。这在需要对常量值执行操作时非常有用。
+
+**基本用法：**
+
+```typescript
+// 不使用 wrap（传统方式）
+interface Validator {
+  match(text: string, pattern: RegExp): boolean;
+}
+const validator = variable<Validator>();
+const result = validator.match("hello", /^[a-z]+$/i);
+
+// 使用 wrap（推荐方式）
+const pattern = wrap(/^[a-z]+$/i);
+const input = variable<string>();
+const result = pattern.test(input);
+```
+
+**支持的类型：**
+
+```typescript
+// 原始值
+const num = wrap(42);
+const str = wrap("hello");
+const bool = wrap(true);
+
+// Date 和 RegExp
+const date = wrap(new Date("2024-01-01"));
+const year = date.getFullYear();
+
+const regex = wrap(/\d+/g);
+const text = variable<string>();
+const matches = text.match(regex);
+
+// BigInt
+const bigNum = wrap(123456789n);
+const x = variable<bigint>();
+const sum = expr({ bigNum, x })("bigNum + x");
+
+// URL
+const url = wrap(new URL("https://example.com/path"));
+const host = url.hostname;
+const port = url.port;
+
+// Map 和 Set
+const map = wrap(
+  new Map([
+    ["key1", 100],
+    ["key2", 200],
+  ])
+);
+const key = variable<string>();
+const value = map.get(key);
+
+const set = wrap(new Set([1, 2, 3]));
+const num = variable<number>();
+const has = set.has(num);
+
+// TypedArray
+const arr = wrap(new Uint8Array([10, 20, 30]));
+const index = variable<number>();
+const value = expr({ arr, index })("arr[index]");
+
+// 数组和对象
+const numbers = wrap([1, 2, 3, 4, 5]);
+const multiplier = variable<number>();
+const scaled = numbers.map(lambda((n: number) => expr({ n, multiplier })("n * multiplier")));
+
+const config = wrap({ port: 8080, host: "localhost" });
+const port = config.port;
+```
+
+**链式调用：**
+
+```typescript
+const text = wrap("  Hello, World!  ");
+const result = text.trim().toLowerCase().replace("world", "universe");
+// => "hello, universe!"
+```
+
+**与 variable 结合：**
+
+```typescript
+const staticData = wrap({ users: ["alice", "bob", "charlie"] });
+const index = variable<number>();
+const username = expr({ staticData, index })("staticData.users[index]");
+
+const compiled = compile(username, { index });
+evaluate(compiled, { index: 1 }); // => "bob"
+```
 
 ### Proxy 变量系统
 

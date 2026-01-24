@@ -38,6 +38,60 @@ type ProxifiedArrayMethods =
   | "sort";
 
 /**
+ * 字符串类型的 Proxify 版本
+ * 将所有字符串方法返回值包装为 Proxify
+ * 参数允许为 Proxy 或原始值
+ */
+export type ProxifiedString = {
+  // 显式定义常用字符串方法以确保类型正确
+  charAt(pos: number | Proxify<number>): Proxify<string>;
+  charCodeAt(index: number | Proxify<number>): Proxify<number>;
+  concat(...strings: (string | Proxify<string>)[]): Proxify<string>;
+  indexOf(searchString: string | Proxify<string>, position?: number | Proxify<number>): Proxify<number>;
+  lastIndexOf(searchString: string | Proxify<string>, position?: number | Proxify<number>): Proxify<number>;
+  localeCompare(that: string | Proxify<string>): Proxify<number>;
+  match(regexp: string | RegExp | Proxify<string> | Proxify<RegExp>): Proxify<RegExpMatchArray | null>;
+  replace(
+    searchValue: string | RegExp | Proxify<string> | Proxify<RegExp>,
+    replaceValue: string | Proxify<string> | Proxify<(substring: string, ...args: unknown[]) => string>
+  ): Proxify<string>;
+  replaceAll(
+    searchValue: string | RegExp | Proxify<string> | Proxify<RegExp>,
+    replaceValue: string | Proxify<string> | Proxify<(substring: string, ...args: unknown[]) => string>
+  ): Proxify<string>;
+  search(regexp: string | RegExp | Proxify<string> | Proxify<RegExp>): Proxify<number>;
+  slice(start?: number | Proxify<number>, end?: number | Proxify<number>): Proxify<string>;
+  split(
+    separator: string | RegExp | Proxify<string> | Proxify<RegExp>,
+    limit?: number | Proxify<number>
+  ): Proxify<string[]>;
+  substring(start: number | Proxify<number>, end?: number | Proxify<number>): Proxify<string>;
+  toLowerCase(): Proxify<string>;
+  toLocaleLowerCase(): Proxify<string>;
+  toUpperCase(): Proxify<string>;
+  toLocaleUpperCase(): Proxify<string>;
+  trim(): Proxify<string>;
+  trimStart(): Proxify<string>;
+  trimEnd(): Proxify<string>;
+  padStart(maxLength: number | Proxify<number>, fillString?: string | Proxify<string>): Proxify<string>;
+  padEnd(maxLength: number | Proxify<number>, fillString?: string | Proxify<string>): Proxify<string>;
+  repeat(count: number | Proxify<number>): Proxify<string>;
+  startsWith(searchString: string | Proxify<string>, position?: number | Proxify<number>): Proxify<boolean>;
+  endsWith(searchString: string | Proxify<string>, endPosition?: number | Proxify<number>): Proxify<boolean>;
+  includes(searchString: string | Proxify<string>, position?: number | Proxify<number>): Proxify<boolean>;
+  at(index: number | Proxify<number>): Proxify<string | undefined>;
+  codePointAt(pos: number | Proxify<number>): Proxify<number | undefined>;
+  normalize(form?: string | Proxify<string>): Proxify<string>;
+  matchAll(regexp: RegExp | Proxify<RegExp>): Proxify<IterableIterator<RegExpMatchArray>>;
+
+  // length 属性
+  readonly length: Proxify<number>;
+
+  // 其他方法使用索引签名兜底
+  [key: string]: unknown;
+};
+
+/**
  * 数组类型的 Proxify 版本
  * 特殊处理泛型方法（map, filter 等），确保返回值类型正确
  */
@@ -88,18 +142,21 @@ export type ProxifiedArray<T> = {
  * 将类型 T 转换为 Proxy 包装类型
  * - 始终包含 ProxyExpression<T> 标记，用于 compile 函数类型检查
  * - 函数类型：保持函数签名，但参数允许 Proxy 或原始值，返回值递归应用 Proxify
+ * - 字符串类型：使用 ProxifiedString 特殊处理字符串方法
  * - 数组类型：使用 ProxifiedArray 特殊处理泛型方法
  * - 对象类型：映射所有属性为 Proxify
  * - 原始类型：保持不变（返回 ProxyExpression 包装）
  */
 export type Proxify<T> = ProxyExpression<T> &
-  (T extends (...args: infer Args) => infer R
-    ? (...args: ProxifyArgs<Args>) => Proxify<R>
-    : T extends readonly (infer E)[]
-      ? ProxifiedArray<E>
-      : T extends object
-        ? { [K in keyof T]: Proxify<T[K]> }
-        : unknown);
+  (T extends string
+    ? ProxifiedString
+    : T extends (...args: infer Args) => infer R
+      ? (...args: ProxifyArgs<Args>) => Proxify<R>
+      : T extends readonly (infer E)[]
+        ? ProxifiedArray<E>
+        : T extends object
+          ? { [K in keyof T]: Proxify<T[K]> }
+          : unknown);
 
 /**
  * Variable 类型定义
