@@ -197,10 +197,6 @@ describe("lambda 函数", () => {
     });
   });
 
-  describe("错误处理", () => {
-    // lambda 现在支持返回普通值，因此不再有 "Lambda body must return a Proxy expression" 错误
-  });
-
   describe("返回普通值", () => {
     test("返回包含 Proxy 变量的对象字面量", () => {
       const items = variable<string[]>();
