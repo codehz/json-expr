@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, expr, lambda, variable } from "./index";
 
@@ -138,9 +137,7 @@ describe("lambda 函数", () => {
       const items = variable<string[]>();
       // 使用非 shorthand 语法以保持明确的属性名
       const indexed = items.map(
-        lambda<[string, number], { item: string; index: number }>(
-          (item, index) => expr({ item, index })("{ item: item, index: index }") as any
-        )
+        lambda<[string, number], { item: string; index: number }>((item, index) => ({ item, index }))
       );
 
       const compiled = compile(indexed, { items });
@@ -201,11 +198,78 @@ describe("lambda 函数", () => {
   });
 
   describe("错误处理", () => {
-    test("lambda body 必须返回 Proxy 表达式", () => {
-      expect(() => {
-        // @ts-expect-error - 故意传入非 Proxy 值测试错误处理
-        lambda<[number], number>(() => 42);
-      }).toThrow("Lambda body must return a Proxy expression");
+    // lambda 现在支持返回普通值，因此不再有 "Lambda body must return a Proxy expression" 错误
+  });
+
+  describe("返回普通值", () => {
+    test("返回包含 Proxy 变量的对象字面量", () => {
+      const items = variable<string[]>();
+      const indexed = items.map(
+        lambda<[string, number], { item: string; index: number }>((item, index) => ({ item, index }))
+      );
+
+      const compiled = compile(indexed, { items });
+      const result = evaluate(compiled, { items: ["a", "b", "c"] });
+      expect(result).toEqual([
+        { item: "a", index: 0 },
+        { item: "b", index: 1 },
+        { item: "c", index: 2 },
+      ]);
+    });
+
+    test("返回原始值常量", () => {
+      const numbers = variable<number[]>();
+      const mapped = numbers.map(lambda<[number], number>(() => 42));
+
+      const compiled = compile(mapped, { numbers });
+      const result = evaluate(compiled, { numbers: [1, 2, 3] });
+      expect(result).toEqual([42, 42, 42]);
+    });
+
+    test("返回字符串常量", () => {
+      const items = variable<string[]>();
+      const mapped = items.map(lambda<[string], string>(() => "constant"));
+
+      const compiled = compile(mapped, { items });
+      const result = evaluate(compiled, { items: ["a", "b"] });
+      expect(result).toEqual(["constant", "constant"]);
+    });
+
+    test("返回包含混合值的数组", () => {
+      const numbers = variable<number[]>();
+      const pairs = numbers.map(lambda<[number], [number, string]>((n) => [n, "item"]));
+
+      const compiled = compile(pairs, { numbers });
+      const result = evaluate(compiled, { numbers: [1, 2, 3] });
+      expect(result).toEqual([
+        [1, "item"],
+        [2, "item"],
+        [3, "item"],
+      ]);
+    });
+
+    test("返回包含外部变量的对象", () => {
+      const items = variable<string[]>();
+      const prefix = variable<string>();
+      const tagged = items.map(
+        lambda<[string], { value: string; tag: string }>((item) => ({ value: item, tag: prefix }))
+      );
+
+      const compiled = compile(tagged, { items, prefix });
+      const result = evaluate(compiled, { items: ["a", "b"], prefix: "test" });
+      expect(result).toEqual([
+        { value: "a", tag: "test" },
+        { value: "b", tag: "test" },
+      ]);
+    });
+
+    test("返回嵌套对象", () => {
+      const numbers = variable<number[]>();
+      const nested = numbers.map(lambda<[number], { outer: { inner: number } }>((n) => ({ outer: { inner: n } })));
+
+      const compiled = compile(nested, { numbers });
+      const result = evaluate(compiled, { numbers: [1, 2, 3] });
+      expect(result).toEqual([{ outer: { inner: 1 } }, { outer: { inner: 2 } }, { outer: { inner: 3 } }]);
     });
   });
 });

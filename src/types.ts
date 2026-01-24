@@ -277,13 +277,39 @@ export type InferExpressionType<E> = E extends Expression<unknown, infer R> ? R 
 export type LambdaParam<T> = Proxify<T>;
 
 /**
+ * 原始类型
+ */
+type Primitive = string | number | boolean | null | undefined | symbol | bigint;
+
+/**
+ * 深度允许 Proxy 或原始值的类型
+ * 用于 lambda 返回值，允许对象/数组中混合 Proxy 和原始值
+ */
+type DeepPartialProxy<T> = T extends Primitive
+  ? T
+  : T extends readonly (infer E)[]
+    ? readonly (Proxify<E> | DeepPartialProxy<E>)[]
+    : T extends object
+      ? { [K in keyof T]: Proxify<T[K]> | DeepPartialProxy<T[K]> }
+      : T;
+
+/**
+ * Lambda 函数体返回值类型
+ * 支持返回：
+ * - Proxify<R>: 完整的代理表达式
+ * - 原始值: 字符串、数字等
+ * - 对象/数组: 可以混合 Proxy 值和原始值
+ */
+export type LambdaBodyResult<T> = Proxify<T> | DeepPartialProxy<T>;
+
+/**
  * Lambda 构建函数签名
  * @template Args - 参数类型元组
  * @template R - 返回值类型
  */
 export type LambdaBuilder<Args extends unknown[], R> = (
   ...params: { [K in keyof Args]: LambdaParam<Args[K]> }
-) => Proxify<R>;
+) => LambdaBodyResult<R>;
 
 /**
  * Lambda 表达式类型

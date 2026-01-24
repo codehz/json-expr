@@ -1,6 +1,11 @@
 // lambda.ts
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
-import { createProxyExpressionWithSource, createProxyVariable } from "./proxy-variable";
+import {
+  collectDepsFromArgs,
+  createProxyExpressionWithSource,
+  createProxyVariable,
+  serializeArgument,
+} from "./proxy-variable";
 import type { Lambda, LambdaBuilder, Proxify } from "./types";
 
 /**
@@ -88,13 +93,26 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
   const bodyExpr = builder(...(params as Parameters<LambdaBuilder<Args, R>>));
 
   // 3. 从 bodyExpr 中提取源码和依赖
-  const meta = getProxyMetadata(bodyExpr as object);
-  if (!meta?.source) {
-    throw new Error("Lambda body must return a Proxy expression");
-  }
+  //    支持返回 Proxy 表达式、普通对象/数组、或原始值
+  let bodySource: string;
+  let bodyDeps: Set<symbol>;
 
-  const bodySource = meta.source;
-  const bodyDeps = meta.dependencies ?? new Set<symbol>();
+  const meta =
+    (typeof bodyExpr === "object" || typeof bodyExpr === "function") && bodyExpr !== null
+      ? getProxyMetadata(bodyExpr as object)
+      : undefined;
+
+  if (meta?.source) {
+    // Proxy 表达式：使用其源码和依赖
+    bodySource = meta.source;
+    bodyDeps = meta.dependencies ?? new Set<symbol>();
+  } else {
+    // 普通对象、数组或原始值：使用 serializeArgument 转换
+    // 并收集其中可能包含的 Proxy 变量依赖
+    bodySource = serializeArgument(bodyExpr);
+    bodyDeps = new Set<symbol>();
+    collectDepsFromArgs([bodyExpr], bodyDeps);
+  }
 
   // 4. 将参数占位符替换为实际参数名 (_0, _1, _2...)
   let lambdaBody = bodySource;
