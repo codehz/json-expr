@@ -1,6 +1,5 @@
 // 函数导出
 export { compile, type CompileOptions } from "./compile";
-export { constant } from "./constant";
 export { evaluate } from "./evaluate";
 export { expr } from "./expr";
 export { isProxy, isProxyExpression, isProxyVariable } from "./proxy-metadata";

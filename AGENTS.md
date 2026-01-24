@@ -12,7 +12,7 @@
 ## 核心 API
 
 ```typescript
-import { variable, expr, constant, compile, evaluate, t } from "@codehz/json-expr";
+import { variable, expr, compile, evaluate, t } from "@codehz/json-expr";
 
 // 定义类型化变量（使用 TypeScript 泛型，无需 Zod）
 const x = variable<number>();
@@ -21,9 +21,6 @@ const y = variable<number>();
 // 构建表达式
 const sum = expr({ x, y })("x + y");
 const result = expr({ sum, x })("sum * x");
-
-// 使用常量
-const PI = constant(3.14159);
 
 // 使用模板字符串
 const name = variable<string>();
@@ -41,7 +38,6 @@ src/
 ├── index.ts              # 导出入口
 ├── variable.ts           # variable<T>() 函数
 ├── expr.ts               # expr() 函数
-├── constant.ts           # constant() 函数 - 创建编译期常量表达式
 ├── template.ts           # t() 标签模板函数 - 支持模板字符串插值
 ├── compile.ts            # 编译器（内联优化、短路求值）
 ├── evaluate.ts           # 运行时求值
