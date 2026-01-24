@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { compile, evaluate, variable } from "./index";
 import { getProxyMetadata } from "./proxy-metadata";
 
-describe("Proxy Variable", () => {
-  test("should create proxy variable", () => {
+describe("代理变量 单元测试", () => {
+  test("创建代理变量", () => {
     const x = variable<number>();
     expect(typeof x).toBe("function"); // Proxy wraps function
     const meta = getProxyMetadata(x as object);
     expect(meta?.type).toBe("variable");
   });
 
-  test("should support property access", () => {
+  test("支持属性访问", () => {
     interface Config {
       timeout: number;
       retries: number;
@@ -23,7 +23,7 @@ describe("Proxy Variable", () => {
     expect(meta?.source).toContain("timeout");
   });
 
-  test("should compile property access", () => {
+  test("编译属性访问", () => {
     interface Config {
       timeout: number;
     }
@@ -35,7 +35,7 @@ describe("Proxy Variable", () => {
     expect(result).toBe(5000);
   });
 
-  test("should support method calls", () => {
+  test("支持方法调用", () => {
     interface Builder {
       build(name: string): { name: string };
     }
@@ -47,7 +47,7 @@ describe("Proxy Variable", () => {
     expect(meta?.source).toContain("build");
   });
 
-  test("should compile method calls with literal arguments", () => {
+  test("编译字面量参数的方法调用", () => {
     interface Calculator {
       add(a: number, b: number): number;
     }
@@ -59,7 +59,7 @@ describe("Proxy Variable", () => {
     expect(result).toBe(3);
   });
 
-  test("should compile method calls with variable arguments", () => {
+  test("编译变量参数的方法调用", () => {
     interface Calculator {
       double(n: number): number;
     }
@@ -75,7 +75,7 @@ describe("Proxy Variable", () => {
     expect(result).toBe(10);
   });
 
-  test("should support chained method calls", () => {
+  test("支持链式方法调用", () => {
     interface Builder {
       setName(name: string): Builder;
       build(): { name: string };
@@ -98,7 +98,7 @@ describe("Proxy Variable", () => {
     expect(evalResult).toEqual({ name: "test" });
   });
 
-  test("should support nested property access", () => {
+  test("支持嵌套属性访问", () => {
     interface Nested {
       level1: {
         level2: {
@@ -116,7 +116,7 @@ describe("Proxy Variable", () => {
     expect(result).toBe(42);
   });
 
-  test("should support array literal arguments", () => {
+  test("支持数组字面量参数", () => {
     interface UI {
       list(items: string[]): string;
     }
@@ -130,7 +130,7 @@ describe("Proxy Variable", () => {
     expect(result).toBe("a,b,c");
   });
 
-  test("should support object literal arguments", () => {
+  test("支持对象字面量参数", () => {
     interface UI {
       configure(opts: { padding: number; margin: number }): void;
     }
@@ -142,7 +142,7 @@ describe("Proxy Variable", () => {
     expect(meta?.source).toContain("margin");
   });
 
-  test("should support mixed variable and literal arguments", () => {
+  test("支持混合变量和字面量参数", () => {
     interface Formatter {
       format(template: string, value: number): string;
     }
