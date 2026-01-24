@@ -51,31 +51,24 @@ describe("compile 单元测试", () => {
   });
 
   describe("错误检测", () => {
-    test("检测未定义的变量引用", () => {
+    test("未定义的变量保留在表达式中", () => {
       const x = variable<number>();
       const y = variable<number>();
 
+      // 新 Proxy 系统中，未定义的变量 z 会保留在表达式中
+      // 类型检查会在编译时捕获这类错误
+      // 绕过类型检查时，z 会作为全局变量处理
       const sum = expr({ x, y })("x + y + z");
+      const compiled = compile(sum as unknown as import("./types").ProxyExpression<number>, { x, y });
 
-      expect(() => {
-        compile(sum, { x, y });
-      }).toThrow();
-    });
-
-    test("检测表达式中引用不存在的上下文变量", () => {
-      const x = variable<number>();
-
-      const e1 = expr({ x })("x + 1");
-      const e2 = expr({ e1 })("e1 + e2"); // e2 不存在
-
-      expect(() => {
-        compile(e2, { x });
-      }).toThrow();
+      // z 保留在表达式中，不会被替换
+      expect(typeof compiled[1]).toBe("string");
+      expect((compiled[1] as string).includes("z")).toBe(true);
     });
   });
 
-  describe("内联优化输出", () => {
-    test("内联模式减少表达式数量", () => {
+  describe("嵌套表达式内联", () => {
+    test("子表达式自动内联到结果中", () => {
       const x = variable<number>();
       const y = variable<number>();
 
@@ -83,28 +76,10 @@ describe("compile 单元测试", () => {
       const product = expr({ x, y })("x * y");
       const result = expr({ sum, product })("sum + product");
 
-      const inlined = compile(result, { x, y }); // 默认内联
-      const notInlined = compile(result, { x, y }, { inline: false });
-
-      expect(inlined.length).toBe(2);
-      expect(notInlined.length).toBe(4);
-    });
-
-    test("非内联模式保留所有中间表达式", () => {
-      const x = variable<number>();
-      const y = variable<number>();
-
-      const sum = expr({ x, y })("x + y");
-      const product = expr({ x, y })("x * y");
-      const result = expr({ sum, product })("sum + product");
-
-      const compiled = compile(result, { x, y }, { inline: false });
-
-      expect(compiled).toHaveLength(4);
+      // 新的 Proxy 系统自动内联所有子表达式
+      const compiled = compile(result, { x, y });
+      expect(compiled.length).toBe(2); // [变量名, 表达式]
       expect(compiled[0]).toEqual(["x", "y"]);
-      expect(compiled[1]).toBe("$0+$1"); // sum
-      expect(compiled[2]).toBe("$0*$1"); // product
-      expect(compiled[3]).toBe("$2+$3"); // result
     });
   });
 

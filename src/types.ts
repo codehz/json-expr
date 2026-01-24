@@ -1,8 +1,54 @@
+// ============================================================================
+// Proxy 类型系统
+// ============================================================================
+
 /**
- * 表示一个类型化变量
+ * Proxy Expression 类型标记（用于类型推导）
+ * 这是一个 phantom type，实际运行时是 Proxy 对象
+ */
+export type ProxyExpression<T = unknown> = {
+  readonly __proxyExpression: T;
+};
+
+/**
+ * 处理函数参数的 Proxy 转换
+ * 参数可以是原始值或对应的 Proxy
+ */
+export type ProxifyArgs<T extends unknown[]> = {
+  [K in keyof T]: T[K] | Proxify<T[K]>;
+};
+
+/**
+ * 将类型 T 转换为 Proxy 包装类型
+ * - 始终包含 ProxyExpression<T> 标记，用于 compile 函数类型检查
+ * - 函数类型：保持函数签名，但参数允许 Proxy 或原始值，返回值递归应用 Proxify
+ * - 对象类型：映射所有属性为 Proxify
+ * - 原始类型：保持不变（返回 ProxyExpression 包装）
+ */
+export type Proxify<T> = ProxyExpression<T> &
+  (T extends (...args: infer Args) => infer R
+    ? (...args: ProxifyArgs<Args>) => Proxify<R>
+    : T extends object
+      ? { [K in keyof T]: Proxify<T[K]> }
+      : unknown);
+
+/**
+ * Variable 类型定义
+ * 总是返回 Proxy 包装后的类型
  * @template T - 变量的值类型
  */
-export type Variable<T = unknown> = {
+export type Variable<T = unknown> = Proxify<T>;
+
+// ============================================================================
+// 旧式类型定义（兼容性保留）
+// ============================================================================
+
+/**
+ * 旧式变量类型定义
+ * @template T - 变量的值类型
+ * @deprecated 请使用新的 Proxy 类型系统
+ */
+export type LegacyVariable<T = unknown> = {
   _tag: "variable";
   _type: T; // 仅用于类型推导，运行时不存在
 };
@@ -11,6 +57,7 @@ export type Variable<T = unknown> = {
  * 表示一个表达式
  * @template TContext - 表达式上下文类型
  * @template TResult - 表达式结果类型
+ * @deprecated 请使用新的 Proxy 类型系统
  */
 export type Expression<TContext = Record<string, unknown>, TResult = unknown> = {
   _tag: "expression";

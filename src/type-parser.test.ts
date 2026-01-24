@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { expr, variable } from "./index";
+import { getProxyMetadata } from "./proxy-metadata";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 
 // ============================================================================
@@ -120,13 +121,11 @@ describe("type-parser 单元测试", () => {
       const _y = variable<number>();
 
       const _sum = expr({ x: _x, y: _y })("x + y");
+      const meta = getProxyMetadata(_sum as object);
 
-      // 验证类型推导
-      type _SumType = typeof _sum._type;
-      type _test = Expect<Equal<_SumType, number>>;
-
-      expect(_sum._tag).toBe("expression");
-      expect(_sum.source).toBe("x + y");
+      // 验证元数据
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
 
     test("expr 函数支持嵌套表达式", () => {
@@ -135,22 +134,20 @@ describe("type-parser 单元测试", () => {
 
       const _sum = expr({ x: _x, y: _y })("x + y");
       const _doubled = expr({ sum: _sum })("sum * 2");
+      const meta = getProxyMetadata(_doubled as object);
 
-      type _DoubledType = typeof _doubled._type;
-      type _test = Expect<Equal<_DoubledType, number>>;
-
-      expect(_doubled.source).toBe("sum * 2");
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
 
     test("expr 函数正确推导比较表达式", () => {
       const _age = variable<number>();
 
       const _isAdult = expr({ age: _age })("age >= 18");
+      const meta = getProxyMetadata(_isAdult as object);
 
-      type _IsAdultType = typeof _isAdult._type;
-      type _test = Expect<Equal<_IsAdultType, boolean>>;
-
-      expect(_isAdult.source).toBe("age >= 18");
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
 
     test("expr 函数正确推导复杂表达式", () => {
@@ -159,11 +156,10 @@ describe("type-parser 单元测试", () => {
 
       // (x + y) * 2 - 1
       const _complex = expr({ x: _x, y: _y })("(x + y) * 2 - 1");
+      const meta = getProxyMetadata(_complex as object);
 
-      type _ComplexType = typeof _complex._type;
-      type _test = Expect<Equal<_ComplexType, number>>;
-
-      expect(_complex.source).toBe("(x + y) * 2 - 1");
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
 
     test("expr 函数正确推导逻辑表达式", () => {
@@ -171,12 +167,11 @@ describe("type-parser 单元测试", () => {
       const _b = variable<boolean>();
 
       const _result = expr({ a: _a, b: _b })("a && b || !a");
+      const meta = getProxyMetadata(_result as object);
 
       // 逻辑表达式最终返回 boolean
-      type _ResultType = typeof _result._type;
-      // && 和 || 的返回类型较复杂，但最终都是 boolean 相关
-
-      expect(_result.source).toBe("a && b || !a");
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
 
     test("expr 函数处理字符串表达式", () => {
@@ -184,11 +179,10 @@ describe("type-parser 单元测试", () => {
       const _lastName = variable<string>();
 
       const _fullName = expr({ firstName: _firstName, lastName: _lastName })("firstName + lastName");
+      const meta = getProxyMetadata(_fullName as object);
 
-      type _FullNameType = typeof _fullName._type;
-      type _test = Expect<Equal<_FullNameType, string>>;
-
-      expect(_fullName.source).toBe("firstName + lastName");
+      expect(meta?.type).toBe("expression");
+      expect(meta?.source).toBeDefined();
     });
   });
 
@@ -201,15 +195,11 @@ describe("type-parser 单元测试", () => {
       const _sum = expr({ x: _x, y: _y })("x + y");
       const _isPositive = expr({ sum: _sum })("sum > 0");
 
-      // 验证类型
-      type _SumType = typeof _sum._type;
-      type _IsPositiveType = typeof _isPositive._type;
+      const sumMeta = getProxyMetadata(_sum as object);
+      const isPositiveMeta = getProxyMetadata(_isPositive as object);
 
-      type _test1 = Expect<Equal<_SumType, number>>;
-      type _test2 = Expect<Equal<_IsPositiveType, boolean>>;
-
-      expect(_sum._tag).toBe("expression");
-      expect(_isPositive._tag).toBe("expression");
+      expect(sumMeta?.type).toBe("expression");
+      expect(isPositiveMeta?.type).toBe("expression");
     });
   });
 

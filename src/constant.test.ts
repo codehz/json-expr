@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, constant, evaluate, expr, variable } from "./index";
+import { getProxyMetadata } from "./proxy-metadata";
 
 describe("constant 单元测试", () => {
   describe("基本常量类型", () => {
@@ -33,14 +34,18 @@ describe("constant 单元测试", () => {
 
     test("数组常量", () => {
       const arr = constant([1, 2, 3]);
-      const compiled = compile(arr, {});
+      // Proxify<T[]> 返回代理数组，需要通过 expr 使用
+      const wrapped = expr({ arr })("arr");
+      const compiled = compile(wrapped, {});
       const result = evaluate<number[]>(compiled, {});
       expect(result).toEqual([1, 2, 3]);
     });
 
     test("对象常量", () => {
       const config = constant({ maxRetries: 3, timeout: 5000 });
-      const compiled = compile(config, {});
+      // Proxify<object> 返回代理对象，需要通过 expr 使用
+      const wrapped = expr({ config })("config");
+      const compiled = compile(wrapped, {});
       const result = evaluate<{ maxRetries: number; timeout: number }>(compiled, {});
       expect(result).toEqual({ maxRetries: 3, timeout: 5000 });
     });
@@ -53,7 +58,9 @@ describe("constant 单元测试", () => {
           },
         },
       });
-      const compiled = compile(nested, {});
+      // Proxify<object> 返回代理对象，需要通过 expr 使用
+      const wrapped = expr({ nested })("nested");
+      const compiled = compile(wrapped, {});
       const result = evaluate<{ level1: { level2: { value: number } } }>(compiled, {});
       expect(result.level1.level2.value).toBe(42);
     });
@@ -94,14 +101,17 @@ describe("constant 单元测试", () => {
   describe("常量属性验证", () => {
     test("source 应为 JSON 字符串", () => {
       const num = constant(42);
-      expect(num.source).toBe("42");
+      const numMeta = getProxyMetadata(num as object);
+      expect(numMeta?.source).toBe("42");
 
       const str = constant("test");
-      expect(str.source).toBe('"test"');
+      const strMeta = getProxyMetadata(str as object);
+      expect(strMeta?.source).toBe('"test"');
 
       const obj = constant({ a: 1 });
-      expect(num._tag).toBe("expression");
-      expect(JSON.parse(obj.source)).toEqual({ a: 1 });
+      const objMeta = getProxyMetadata(obj as object);
+      expect(numMeta?.type).toBe("expression");
+      expect(JSON.parse(objMeta?.source ?? "{}")).toEqual({ a: 1 });
     });
   });
 });

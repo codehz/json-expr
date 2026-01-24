@@ -1,9 +1,13 @@
+// 函数导出
 export { compile, type CompileOptions } from "./compile";
 export { constant } from "./constant";
 export { evaluate } from "./evaluate";
 export { expr } from "./expr";
-export { variable } from "./variable";
+export { isProxy, isProxyExpression, isProxyVariable } from "./proxy-metadata";
+export { t } from "./template";
+export { getVariableId, variable } from "./variable";
 
+// 类型导出
 export type {
   BranchNode,
   CompileContext,
@@ -17,6 +21,8 @@ export type {
   InferVariableType,
   JumpNode,
   PhiNode,
+  Proxify,
+  ProxyExpression,
   Variable,
 } from "./types";
 
