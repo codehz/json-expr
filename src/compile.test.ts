@@ -104,4 +104,38 @@ describe("compile 单元测试", () => {
       expect(result[1]).toBe("($0+$1)*2");
     });
   });
+
+  describe("支持直接传入对象/数组", () => {
+    test("支持对象中包含 Proxy", () => {
+      const x = variable<number>();
+      const y = variable<number>();
+      const sum = expr({ x, y })("x + y");
+
+      const result = compile({ sum, x, constant: 1 }, { x, y });
+
+      expect(result[0]).toEqual(["x", "y"]);
+      expect(result[1]).toBe("{sum:$0+$1,x:$0,constant:1}");
+    });
+
+    test("支持数组中包含 Proxy", () => {
+      const x = variable<number[]>();
+      const result = compile([x, x.at(0), 42], { x });
+
+      expect(result[0]).toEqual(["x"]);
+      expect(result[1]).toBe("[$0,$0.at(0),42]");
+    });
+
+    test("支持直接传入 root variable", () => {
+      const x = variable<number>();
+      const result = compile(x, { x });
+
+      expect(result[0]).toEqual(["x"]);
+      expect(result[1]).toBe("$0");
+    });
+
+    test("支持原始值", () => {
+      const result = compile(123, {});
+      expect(result[1]).toBe("123");
+    });
+  });
 });

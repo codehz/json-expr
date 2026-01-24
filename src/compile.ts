@@ -1,6 +1,6 @@
 import { generate, parse, type ASTNode } from "./parser";
-import { getProxyMetadata } from "./proxy-metadata";
-import type { BranchNode, CompiledData, CompiledExpression, JumpNode, PhiNode, ProxyExpression } from "./types";
+import { serializeArgument } from "./proxy-variable";
+import type { BranchNode, CompiledData, CompiledExpression, JumpNode, LambdaBodyResult, PhiNode } from "./types";
 import { getVariableId } from "./variable";
 
 const ALLOWED_GLOBALS = new Set([
@@ -66,7 +66,7 @@ function preprocessExpression(source: string, context: Record<string, unknown>):
  * 将 Proxy Expression 编译为可序列化的 JSON 结构
  *
  * @template TResult - 表达式结果类型
- * @param expression - Proxy Expression
+ * @param expression - Proxy Expression，或包含 Proxy 的对象/数组/原始值
  * @param variables - 所有使用的变量定义
  * @param options - 编译选项
  * @returns 编译后的数据结构 [变量名列表, 表达式1, 表达式2, ...]
@@ -84,20 +84,15 @@ function preprocessExpression(source: string, context: Record<string, unknown>):
  * ```
  */
 export function compile<TResult>(
-  expression: ProxyExpression<TResult>,
+  expression: LambdaBodyResult<TResult>,
   variables: Record<string, unknown>,
   options: CompileOptions = {}
 ): CompiledData {
   const { shortCircuit = true } = options;
 
-  // 获取 Proxy 的元数据
-  const meta = getProxyMetadata(expression as object);
-  if (!meta?.source) {
-    throw new Error("Invalid expression: expected a Proxy Expression");
-  }
-
-  // 预处理：将占位符替换为变量名
-  const source = preprocessExpression(meta.source, variables);
+  // 序列化并预处理：支持 Proxy, Object, Array 和原始值
+  const rawSource = serializeArgument(expression);
+  const source = preprocessExpression(rawSource, variables);
 
   // 建立变量名到索引的映射
   const variableOrder: string[] = [];
