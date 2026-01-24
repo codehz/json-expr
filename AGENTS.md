@@ -12,7 +12,7 @@
 ## 核心 API
 
 ```typescript
-import { variable, expr, constant, compile, evaluate } from "@codehz/json-expr";
+import { variable, expr, constant, compile, evaluate, t } from "@codehz/json-expr";
 
 // 定义类型化变量（使用 TypeScript 泛型，无需 Zod）
 const x = variable<number>();
@@ -21,6 +21,13 @@ const y = variable<number>();
 // 构建表达式
 const sum = expr({ x, y })("x + y");
 const result = expr({ sum, x })("sum * x");
+
+// 使用常量
+const PI = constant(3.14159);
+
+// 使用模板字符串
+const name = variable<string>();
+const greeting = t`Hello, ${name}!`;
 
 // 编译并执行
 const compiled = compile(result, { x, y });
@@ -31,16 +38,19 @@ const value = evaluate(compiled, { x: 2, y: 3 }); // => 10
 
 ```
 src/
-├── index.ts          # 导出入口
-├── variable.ts       # variable<T>() 函数
-├── expr.ts           # expr() 函数
-├── constant.ts       # constant() 函数
-├── compile.ts        # 编译器（内联优化、短路求值）
-├── evaluate.ts       # 运行时求值
-├── parser.ts         # 表达式 AST 解析器
-├── type-parser.ts    # TypeScript 类型级表达式解析
-├── types.ts          # 类型定义（Variable、Expression、ControlFlowNode 等）
-└── *.test.ts         # 测试文件
+├── index.ts              # 导出入口
+├── variable.ts           # variable<T>() 函数
+├── expr.ts               # expr() 函数
+├── constant.ts           # constant() 函数 - 创建编译期常量表达式
+├── template.ts           # t() 标签模板函数 - 支持模板字符串插值
+├── compile.ts            # 编译器（内联优化、短路求值）
+├── evaluate.ts           # 运行时求值
+├── parser.ts             # 表达式 AST 解析器
+├── type-parser.ts        # TypeScript 类型级表达式解析
+├── proxy-variable.ts     # Proxy 变量实现 - 支持属性访问和方法调用
+├── proxy-metadata.ts     # Proxy 元数据管理
+├── types.ts              # 类型定义（Variable、Expression、ControlFlowNode 等）
+└── *.test.ts             # 测试文件
 ```
 
 ## 编译数据格式
