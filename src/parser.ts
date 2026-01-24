@@ -843,6 +843,33 @@ export function generate(node: ASTNode): string {
     case "CallExpr": {
       const callee = wrapIfNeeded(node.callee, node, "callee");
       const args = node.arguments.map(generate).join(",");
+      // 检测是否需要使用 new 关键字（构造函数）
+      const needsNew =
+        node.callee.type === "Identifier" &&
+        [
+          "Date",
+          "RegExp",
+          "URL",
+          "URLSearchParams",
+          "Map",
+          "Set",
+          "Int8Array",
+          "Uint8Array",
+          "Uint8ClampedArray",
+          "Int16Array",
+          "Uint16Array",
+          "Int32Array",
+          "Uint32Array",
+          "Float32Array",
+          "Float64Array",
+          "BigInt64Array",
+          "BigUint64Array",
+          "ArrayBuffer",
+          "DataView",
+        ].includes(node.callee.name);
+      if (needsNew) {
+        return node.optional ? `new ${callee}?.(${args})` : `new ${callee}(${args})`;
+      }
       return node.optional ? `${callee}?.(${args})` : `${callee}(${args})`;
     }
 

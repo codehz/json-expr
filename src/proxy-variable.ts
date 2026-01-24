@@ -15,6 +15,22 @@ import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import type { Proxify } from "./types";
 
 /**
+ * TypedArray 构造函数类型
+ */
+type TypedArrayConstructor =
+  | Int8ArrayConstructor
+  | Uint8ArrayConstructor
+  | Uint8ClampedArrayConstructor
+  | Int16ArrayConstructor
+  | Uint16ArrayConstructor
+  | Int32ArrayConstructor
+  | Uint32ArrayConstructor
+  | Float32ArrayConstructor
+  | Float64ArrayConstructor
+  | BigInt64ArrayConstructor
+  | BigUint64ArrayConstructor;
+
+/**
  * 使用 Symbol.description 生成占位符
  * 用于在表达式源码中标识变量
  */
@@ -28,6 +44,7 @@ function getVariablePlaceholder(id: symbol): string {
  * - 数组：返回 ArrayExpr 节点
  * - 对象：返回 ObjectExpr 节点
  * - 原始值：返回对应的字面量节点
+ * - Date, RegExp, BigInt, URL, URLSearchParams, Map, Set, TypedArray, DataView: 构造函数调用
  */
 export function serializeArgumentToAST(arg: unknown): ASTNode {
   // 1. 检查是否是 Proxy (通过 getProxyMetadata)
@@ -55,7 +72,161 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
     } as ArrayExpr;
   }
 
-  // 3. 普通对象递归处理
+  // 3. 特殊内置对象类型
+  if (typeof arg === "object" && arg !== null) {
+    // Date: new Date(timestamp)
+    if (arg instanceof Date) {
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "Date" } as Identifier,
+        arguments: [
+          {
+            type: "NumberLiteral",
+            value: arg.getTime(),
+            raw: String(arg.getTime()),
+          } as NumberLiteral,
+        ],
+        optional: false,
+      } as CallExpr;
+    }
+
+    // RegExp: new RegExp(source, flags)
+    if (arg instanceof RegExp) {
+      const args: ASTNode[] = [{ type: "StringLiteral", value: arg.source, quote: '"' } as StringLiteral];
+      if (arg.flags) {
+        args.push({ type: "StringLiteral", value: arg.flags, quote: '"' } as StringLiteral);
+      }
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "RegExp" } as Identifier,
+        arguments: args,
+        optional: false,
+      } as CallExpr;
+    }
+
+    // URL: new URL(href)
+    if (typeof URL !== "undefined" && arg instanceof URL) {
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "URL" } as Identifier,
+        arguments: [{ type: "StringLiteral", value: arg.href, quote: '"' } as StringLiteral],
+        optional: false,
+      } as CallExpr;
+    }
+
+    // URLSearchParams: new URLSearchParams(entries)
+    if (typeof URLSearchParams !== "undefined" && arg instanceof URLSearchParams) {
+      const entries: ASTNode[] = [];
+      arg.forEach((value, key) => {
+        entries.push({
+          type: "ArrayExpr",
+          elements: [
+            { type: "StringLiteral", value: key, quote: '"' } as StringLiteral,
+            { type: "StringLiteral", value, quote: '"' } as StringLiteral,
+          ],
+        } as ArrayExpr);
+      });
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "URLSearchParams" } as Identifier,
+        arguments: [{ type: "ArrayExpr", elements: entries } as ArrayExpr],
+        optional: false,
+      } as CallExpr;
+    }
+
+    // Map: new Map(entries)
+    if (arg instanceof Map) {
+      const entries: ASTNode[] = [];
+      arg.forEach((value, key) => {
+        entries.push({
+          type: "ArrayExpr",
+          elements: [serializeArgumentToAST(key), serializeArgumentToAST(value)],
+        } as ArrayExpr);
+      });
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "Map" } as Identifier,
+        arguments: [{ type: "ArrayExpr", elements: entries } as ArrayExpr],
+        optional: false,
+      } as CallExpr;
+    }
+
+    // Set: new Set(values)
+    if (arg instanceof Set) {
+      const values: ASTNode[] = [];
+      arg.forEach((value) => {
+        values.push(serializeArgumentToAST(value));
+      });
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "Set" } as Identifier,
+        arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
+        optional: false,
+      } as CallExpr;
+    }
+
+    // TypedArray: new Uint8Array([...])
+    const typedArrayConstructors = [
+      "Int8Array",
+      "Uint8Array",
+      "Uint8ClampedArray",
+      "Int16Array",
+      "Uint16Array",
+      "Int32Array",
+      "Uint32Array",
+      "Float32Array",
+      "Float64Array",
+      "BigInt64Array",
+      "BigUint64Array",
+    ];
+
+    for (const constructorName of typedArrayConstructors) {
+      if (typeof globalThis[constructorName as keyof typeof globalThis] !== "undefined") {
+        const Constructor = globalThis[constructorName as keyof typeof globalThis] as TypedArrayConstructor;
+        if (arg instanceof Constructor) {
+          // 使用扩展运算符处理 bigint 类型的 TypedArray
+          const values = [...(arg as Iterable<unknown>)].map((val) => serializeArgumentToAST(val));
+          return {
+            type: "CallExpr",
+            callee: { type: "Identifier", name: constructorName } as Identifier,
+            arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
+            optional: false,
+          } as CallExpr;
+        }
+      }
+    }
+
+    // ArrayBuffer: new Uint8Array([...]).buffer
+    if (arg instanceof ArrayBuffer) {
+      const uint8Array = new Uint8Array(arg);
+      const values = Array.from(uint8Array).map((val) => serializeArgumentToAST(val));
+      return {
+        type: "MemberExpr",
+        object: {
+          type: "CallExpr",
+          callee: { type: "Identifier", name: "Uint8Array" } as Identifier,
+          arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
+          optional: false,
+        } as CallExpr,
+        property: { type: "Identifier", name: "buffer" } as Identifier,
+        computed: false,
+        optional: false,
+      } as MemberExpr;
+    }
+
+    // DataView: new DataView(buffer)
+    if (arg instanceof DataView) {
+      const bufferAst = serializeArgumentToAST(arg.buffer);
+      return {
+        type: "CallExpr",
+        callee: { type: "Identifier", name: "DataView" } as Identifier,
+        arguments: [bufferAst],
+        optional: false,
+      } as CallExpr;
+    }
+  }
+
+  // 4. 普通对象递归处理
   if (typeof arg === "object" && arg !== null) {
     const properties = Object.entries(arg).map(([k, v]) => {
       // 检查 key 是否为有效标识符
@@ -77,7 +248,7 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
     } as ObjectExpr;
   }
 
-  // 4. 原始值（包括 null, undefined, number, string, boolean）
+  // 5. 原始值（包括 null, undefined, number, string, boolean, bigint）
   if (arg === null) {
     return { type: "NullLiteral" } as NullLiteral;
   }
@@ -93,8 +264,17 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
   if (typeof arg === "string") {
     return { type: "StringLiteral", value: arg, quote: '"' } as StringLiteral;
   }
+  if (typeof arg === "bigint") {
+    // BigInt: BigInt("123")
+    return {
+      type: "CallExpr",
+      callee: { type: "Identifier", name: "BigInt" } as Identifier,
+      arguments: [{ type: "StringLiteral", value: arg.toString(), quote: '"' } as StringLiteral],
+      optional: false,
+    } as CallExpr;
+  }
 
-  // 其他类型（bigint, symbol 等）暂不支持
+  // 其他类型（symbol 等）暂不支持
   throw new Error(`Unsupported argument type: ${typeof arg}`);
 }
 
