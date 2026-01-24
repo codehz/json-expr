@@ -9,15 +9,6 @@ type TrimStart<S extends string> = S extends ` ${infer Rest}` | `\t${infer Rest}
   ? TrimStart<Rest>
   : S;
 
-type __TrimEnd<S extends string> = S extends `${infer Rest} ` | `${infer Rest}\t` | `${infer Rest}\n`
-  ? __TrimEnd<Rest>
-  : S;
-
-type __Trim<S extends string> = TrimStart<__TrimEnd<S>>;
-
-/** 字符串是否以某前缀开头 */
-type _StartsWith<S extends string, Prefix extends string> = S extends `${Prefix}${string}` ? true : false;
-
 /** 是否是字母或下划线 */
 type IsIdentifierStart<C extends string> = C extends
   | "a"
@@ -87,25 +78,6 @@ type IsIdentifierChar<C extends string> =
 
 /** 是否是数字 */
 type IsDigit<C extends string> = C extends "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ? true : false;
-
-/** 是否是运算符字符 */
-type _IsOperatorChar<C extends string> = C extends
-  | "+"
-  | "-"
-  | "*"
-  | "/"
-  | "%"
-  | "="
-  | "!"
-  | "<"
-  | ">"
-  | "&"
-  | "|"
-  | "^"
-  | "~"
-  | "?"
-  ? true
-  : false;
 
 /** JS保留字和全局对象 */
 type ReservedWords =
@@ -237,9 +209,6 @@ export type ExtractType<T> = T extends Variable<infer V> ? V : T extends Express
 export type ContextTypeMap<TContext> = {
   [K in keyof TContext]: ExtractType<TContext[K]>;
 };
-
-/** 检查所有标识符是否都在上下文中定义 */
-type _ValidateIdentifiers<Ids extends string, ContextKeys extends string> = Ids extends ContextKeys ? true : false;
 
 /** 找出未定义的标识符 */
 type FindUndefinedIdentifiers<Ids extends string, ContextKeys extends string> = Ids extends ContextKeys ? never : Ids;
