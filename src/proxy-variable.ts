@@ -30,12 +30,81 @@ type TypedArrayConstructor =
   | BigInt64ArrayConstructor
   | BigUint64ArrayConstructor;
 
+const typedArrayConstructors = [
+  "Int8Array",
+  "Uint8Array",
+  "Uint8ClampedArray",
+  "Int16Array",
+  "Uint16Array",
+  "Int32Array",
+  "Uint32Array",
+  "Float32Array",
+  "Float64Array",
+  "BigInt64Array",
+  "BigUint64Array",
+];
+
 /**
  * 使用 Symbol.description 生成占位符
  * 用于在表达式源码中标识变量
  */
 function getVariablePlaceholder(id: symbol): string {
   return `$$VAR_${id.description}$$`;
+}
+
+/**
+ * 创建标识符 AST 节点
+ */
+function identifier(name: string): Identifier {
+  return { type: "Identifier", name };
+}
+
+/**
+ * 创建数字字面量 AST 节点
+ */
+function numberLiteral(value: number): NumberLiteral {
+  return { type: "NumberLiteral", value, raw: String(value) };
+}
+
+/**
+ * 创建字符串字面量 AST 节点
+ */
+function stringLiteral(value: string, quote: "'" | '"' | "`" = '"'): StringLiteral {
+  return { type: "StringLiteral", value, quote };
+}
+
+/**
+ * 创建成员表达式 AST 节点
+ */
+function memberExpr(object: ASTNode, property: Identifier): MemberExpr {
+  return { type: "MemberExpr", object, property, computed: false, optional: false };
+}
+
+/**
+ * 创建调用表达式 AST 节点
+ */
+function callExpr(callee: ASTNode, arguments_: ASTNode[]): CallExpr {
+  return { type: "CallExpr", callee, arguments: arguments_, optional: false };
+}
+
+/**
+ * 创建数组表达式 AST 节点
+ */
+function arrayExpr(elements: ASTNode[]): ArrayExpr {
+  return { type: "ArrayExpr", elements };
+}
+
+/**
+ * 检查对象是否为 TypedArray 实例
+ */
+function getTypedArrayConstructor(value: unknown): TypedArrayConstructor | null {
+  for (const constructorName of typedArrayConstructors) {
+    const Constructor = globalThis[constructorName as keyof typeof globalThis] as TypedArrayConstructor;
+    if (Constructor && value instanceof Constructor) {
+      return Constructor;
+    }
+  }
+  return null;
 }
 
 /**
@@ -56,225 +125,97 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
       if (meta.ast) return meta.ast;
       // 否则是根 variable，返回占位符标识符
       if (meta.rootVariable) {
-        return {
-          type: "Identifier",
-          name: getVariablePlaceholder(meta.rootVariable),
-        } as Identifier;
+        return identifier(getVariablePlaceholder(meta.rootVariable));
       }
     }
   }
 
   // 2. 数组递归处理
   if (Array.isArray(arg)) {
-    return {
-      type: "ArrayExpr",
-      elements: arg.map(serializeArgumentToAST),
-    } as ArrayExpr;
+    return arrayExpr(arg.map(serializeArgumentToAST));
   }
 
   // 3. 特殊内置对象类型
   if (typeof arg === "object" && arg !== null) {
     // Date: new Date(timestamp)
     if (arg instanceof Date) {
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "Date" } as Identifier,
-        arguments: [
-          {
-            type: "NumberLiteral",
-            value: arg.getTime(),
-            raw: String(arg.getTime()),
-          } as NumberLiteral,
-        ],
-        optional: false,
-      } as CallExpr;
+      return callExpr(identifier("Date"), [numberLiteral(arg.getTime())]);
     }
 
     // RegExp: new RegExp(source, flags)
     if (arg instanceof RegExp) {
-      const args: ASTNode[] = [{ type: "StringLiteral", value: arg.source, quote: '"' } as StringLiteral];
-      if (arg.flags) {
-        args.push({ type: "StringLiteral", value: arg.flags, quote: '"' } as StringLiteral);
-      }
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "RegExp" } as Identifier,
-        arguments: args,
-        optional: false,
-      } as CallExpr;
+      const args = [stringLiteral(arg.source)];
+      if (arg.flags) args.push(stringLiteral(arg.flags));
+      return callExpr(identifier("RegExp"), args);
     }
 
     // URL: new URL(href)
     if (typeof URL !== "undefined" && arg instanceof URL) {
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "URL" } as Identifier,
-        arguments: [{ type: "StringLiteral", value: arg.href, quote: '"' } as StringLiteral],
-        optional: false,
-      } as CallExpr;
+      return callExpr(identifier("URL"), [stringLiteral(arg.href)]);
     }
 
     // URLSearchParams: new URLSearchParams(entries)
     if (typeof URLSearchParams !== "undefined" && arg instanceof URLSearchParams) {
       const entries: ASTNode[] = [];
       arg.forEach((value, key) => {
-        entries.push({
-          type: "ArrayExpr",
-          elements: [
-            { type: "StringLiteral", value: key, quote: '"' } as StringLiteral,
-            { type: "StringLiteral", value, quote: '"' } as StringLiteral,
-          ],
-        } as ArrayExpr);
+        entries.push(arrayExpr([stringLiteral(key), stringLiteral(value)]));
       });
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "URLSearchParams" } as Identifier,
-        arguments: [{ type: "ArrayExpr", elements: entries } as ArrayExpr],
-        optional: false,
-      } as CallExpr;
+      return callExpr(identifier("URLSearchParams"), [arrayExpr(entries)]);
     }
 
     // Map: new Map(entries)
     if (arg instanceof Map) {
       const entries: ASTNode[] = [];
       arg.forEach((value, key) => {
-        entries.push({
-          type: "ArrayExpr",
-          elements: [serializeArgumentToAST(key), serializeArgumentToAST(value)],
-        } as ArrayExpr);
+        entries.push(arrayExpr([serializeArgumentToAST(key), serializeArgumentToAST(value)]));
       });
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "Map" } as Identifier,
-        arguments: [{ type: "ArrayExpr", elements: entries } as ArrayExpr],
-        optional: false,
-      } as CallExpr;
+      return callExpr(identifier("Map"), [arrayExpr(entries)]);
     }
 
     // Set: new Set(values)
     if (arg instanceof Set) {
       const values: ASTNode[] = [];
-      arg.forEach((value) => {
-        values.push(serializeArgumentToAST(value));
-      });
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "Set" } as Identifier,
-        arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
-        optional: false,
-      } as CallExpr;
+      arg.forEach((value) => values.push(serializeArgumentToAST(value)));
+      return callExpr(identifier("Set"), [arrayExpr(values)]);
     }
 
     // TypedArray: new Uint8Array([...])
-    const typedArrayConstructors = [
-      "Int8Array",
-      "Uint8Array",
-      "Uint8ClampedArray",
-      "Int16Array",
-      "Uint16Array",
-      "Int32Array",
-      "Uint32Array",
-      "Float32Array",
-      "Float64Array",
-      "BigInt64Array",
-      "BigUint64Array",
-    ];
-
-    for (const constructorName of typedArrayConstructors) {
-      if (typeof globalThis[constructorName as keyof typeof globalThis] !== "undefined") {
-        const Constructor = globalThis[constructorName as keyof typeof globalThis] as TypedArrayConstructor;
-        if (arg instanceof Constructor) {
-          // 使用扩展运算符处理 bigint 类型的 TypedArray
-          const values = [...(arg as Iterable<unknown>)].map((val) => serializeArgumentToAST(val));
-          return {
-            type: "CallExpr",
-            callee: { type: "Identifier", name: constructorName } as Identifier,
-            arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
-            optional: false,
-          } as CallExpr;
-        }
-      }
+    const typedArrayConstructor = getTypedArrayConstructor(arg);
+    if (typedArrayConstructor) {
+      const values = [...(arg as Iterable<unknown>)].map(serializeArgumentToAST);
+      const constructorName = typedArrayConstructor.name;
+      return callExpr(identifier(constructorName), [arrayExpr(values)]);
     }
 
     // ArrayBuffer: new Uint8Array([...]).buffer
     if (arg instanceof ArrayBuffer) {
       const uint8Array = new Uint8Array(arg);
-      const values = Array.from(uint8Array).map((val) => serializeArgumentToAST(val));
-      return {
-        type: "MemberExpr",
-        object: {
-          type: "CallExpr",
-          callee: { type: "Identifier", name: "Uint8Array" } as Identifier,
-          arguments: [{ type: "ArrayExpr", elements: values } as ArrayExpr],
-          optional: false,
-        } as CallExpr,
-        property: { type: "Identifier", name: "buffer" } as Identifier,
-        computed: false,
-        optional: false,
-      } as MemberExpr;
+      const values = Array.from(uint8Array).map(numberLiteral);
+      return memberExpr(callExpr(identifier("Uint8Array"), [arrayExpr(values)]), identifier("buffer"));
     }
 
     // DataView: new DataView(buffer)
     if (arg instanceof DataView) {
-      const bufferAst = serializeArgumentToAST(arg.buffer);
-      return {
-        type: "CallExpr",
-        callee: { type: "Identifier", name: "DataView" } as Identifier,
-        arguments: [bufferAst],
-        optional: false,
-      } as CallExpr;
+      return callExpr(identifier("DataView"), [serializeArgumentToAST(arg.buffer)]);
     }
-  }
 
-  // 4. 普通对象递归处理
-  if (typeof arg === "object" && arg !== null) {
+    // 普通对象递归处理
     const properties = Object.entries(arg).map(([k, v]) => {
-      // 检查 key 是否为有效标识符
       const isValidIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k);
-      const key: ASTNode = isValidIdentifier
-        ? ({ type: "Identifier", name: k } as Identifier)
-        : ({ type: "StringLiteral", value: k, quote: '"' } as StringLiteral);
-      const value = serializeArgumentToAST(v);
-      return {
-        key,
-        value,
-        computed: false,
-        shorthand: false,
-      };
+      const key: ASTNode = isValidIdentifier ? identifier(k) : stringLiteral(k);
+      return { key, value: serializeArgumentToAST(v), computed: false, shorthand: false };
     });
-    return {
-      type: "ObjectExpr",
-      properties,
-    } as ObjectExpr;
+    return { type: "ObjectExpr", properties } as ObjectExpr;
   }
 
-  // 5. 原始值（包括 null, undefined, number, string, boolean, bigint）
-  if (arg === null) {
-    return { type: "NullLiteral" } as NullLiteral;
-  }
-  if (arg === undefined) {
-    return { type: "Identifier", name: "undefined" } as Identifier;
-  }
-  if (typeof arg === "boolean") {
-    return { type: "BooleanLiteral", value: arg } as BooleanLiteral;
-  }
-  if (typeof arg === "number") {
-    return { type: "NumberLiteral", value: arg, raw: String(arg) } as NumberLiteral;
-  }
-  if (typeof arg === "string") {
-    return { type: "StringLiteral", value: arg, quote: '"' } as StringLiteral;
-  }
-  if (typeof arg === "bigint") {
-    // BigInt: BigInt("123")
-    return {
-      type: "CallExpr",
-      callee: { type: "Identifier", name: "BigInt" } as Identifier,
-      arguments: [{ type: "StringLiteral", value: arg.toString(), quote: '"' } as StringLiteral],
-      optional: false,
-    } as CallExpr;
-  }
+  // 4. 原始值
+  if (arg === null) return { type: "NullLiteral" } as NullLiteral;
+  if (arg === undefined) return identifier("undefined");
+  if (typeof arg === "boolean") return { type: "BooleanLiteral", value: arg } as BooleanLiteral;
+  if (typeof arg === "number") return numberLiteral(arg);
+  if (typeof arg === "string") return stringLiteral(arg);
+  if (typeof arg === "bigint") return callExpr(identifier("BigInt"), [stringLiteral(arg.toString())]);
 
-  // 其他类型（symbol 等）暂不支持
   throw new Error(`Unsupported argument type: ${typeof arg}`);
 }
 
@@ -301,6 +242,36 @@ export function collectDepsFromArgs(args: unknown[], deps: Set<symbol>): void {
 }
 
 /**
+ * 根据路径构建成员表达式 AST
+ */
+function buildMemberExprAst(rootId: symbol, path: string[]): ASTNode {
+  let ast: ASTNode = identifier(getVariablePlaceholder(rootId));
+  for (const prop of path) {
+    ast = memberExpr(ast, identifier(prop));
+  }
+  return ast;
+}
+
+/**
+ * 创建 Proxy 的公共 handler
+ */
+function createProxyHandler<T>(ast: ASTNode, deps: Set<symbol>): ProxyHandler<Proxify<T>> {
+  return {
+    get(_target, prop) {
+      if (typeof prop === "symbol") return undefined;
+      const newAst = memberExpr(ast, identifier(String(prop)));
+      return createProxyExpressionWithAST<unknown>(newAst, deps);
+    },
+    apply(_target, _thisArg, args) {
+      const callAst = callExpr(ast, args.map(serializeArgumentToAST));
+      const newDeps = new Set(deps);
+      collectDepsFromArgs(args, newDeps);
+      return createProxyExpressionWithAST<T>(callAst, newDeps);
+    },
+  };
+}
+
+/**
  * 创建根 Variable Proxy
  * 拦截属性访问，返回新的 expression proxy
  * 不可直接调用（apply 应该只在链式调用后可用）
@@ -314,8 +285,8 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
   const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
     get(_target, prop) {
       if (typeof prop === "symbol") return undefined;
-      // 属性访问：创建 expression proxy
-      return createProxyExpression<unknown>(id, [String(prop)], deps);
+      const ast = buildMemberExprAst(id, [String(prop)]);
+      return createProxyExpressionWithAST<unknown>(ast, deps);
     },
     apply() {
       throw new Error("Variable cannot be called directly");
@@ -343,41 +314,8 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
  * @returns Proxy 包装的 Expression
  */
 export function createProxyExpression<T>(rootId: symbol, path: string[], deps: Set<symbol>): Proxify<T> {
-  // 构建 MemberExpr AST 节点
-  let ast: ASTNode = {
-    type: "Identifier",
-    name: getVariablePlaceholder(rootId),
-  } as Identifier;
-
-  for (const prop of path) {
-    ast = {
-      type: "MemberExpr",
-      object: ast,
-      property: { type: "Identifier", name: prop } as Identifier,
-      computed: false,
-      optional: false,
-    } as MemberExpr;
-  }
-
-  const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
-    get(_target, prop) {
-      if (typeof prop === "symbol") return undefined;
-      return createProxyExpression<unknown>(rootId, [...path, String(prop)], deps);
-    },
-    apply(_target, _thisArg, args) {
-      // 构建 CallExpr AST 节点
-      const callAst: CallExpr = {
-        type: "CallExpr",
-        callee: ast,
-        arguments: args.map(serializeArgumentToAST),
-        optional: false,
-      };
-      // 收集参数中的依赖
-      const newDeps = new Set(deps);
-      collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithAST<T>(callAst, newDeps);
-    },
-  });
+  const ast = buildMemberExprAst(rootId, path);
+  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
 
   setProxyMetadata(proxy, {
     type: "expression",
@@ -399,36 +337,11 @@ export function createProxyExpression<T>(rootId: symbol, path: string[], deps: S
  * @returns Proxy 包装的 Expression
  */
 export function createProxyExpressionWithAST<T>(ast: ASTNode, deps: Set<symbol>): Proxify<T> {
-  const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
-    get(_target, prop) {
-      if (typeof prop === "symbol") return undefined;
-      // 继续访问：创建新的 MemberExpr
-      const newAst: MemberExpr = {
-        type: "MemberExpr",
-        object: ast,
-        property: { type: "Identifier", name: String(prop) } as Identifier,
-        computed: false,
-        optional: false,
-      };
-      return createProxyExpressionWithAST<unknown>(newAst, deps);
-    },
-    apply(_target, _thisArg, args) {
-      // 创建 CallExpr AST 节点
-      const callAst: CallExpr = {
-        type: "CallExpr",
-        callee: ast,
-        arguments: args.map(serializeArgumentToAST),
-        optional: false,
-      };
-      const newDeps = new Set(deps);
-      collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithAST<T>(callAst, newDeps);
-    },
-  });
+  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
 
   setProxyMetadata(proxy, {
     type: "expression",
-    path: [], // AST 节点不再需要 path 信息
+    path: [],
     ast,
     dependencies: deps,
   });
