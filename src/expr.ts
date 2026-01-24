@@ -1,6 +1,6 @@
-import { generate, parse, transformIdentifiers } from "./parser";
+import { parse, transformIdentifiers, type ASTNode } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
-import { createProxyExpressionWithSource } from "./proxy-variable";
+import { createProxyExpressionWithAST } from "./proxy-variable";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 import type { Proxify } from "./types";
 import { getVariableId, getVariablePlaceholder } from "./variable";
@@ -74,8 +74,8 @@ export function expr<TContext extends Record<string, unknown>>(
       }
     }
 
-    // 建立变量名到表达式源码的映射（用于 Proxy expression）
-    const nameToExprSource = new Map<string, string>();
+    // 建立变量名到子表达式 AST 的映射（用于 Proxy expression）
+    const nameToExprAST = new Map<string, ASTNode>();
     for (const [name, value] of Object.entries(context)) {
       // 注意：Proxy 包装函数，typeof 返回 'function'
       if ((typeof value === "object" || typeof value === "function") && value !== null) {
@@ -83,33 +83,35 @@ export function expr<TContext extends Record<string, unknown>>(
         if (nameToId.has(name)) continue;
 
         const meta = getProxyMetadata(value);
-        if (meta?.source) {
-          nameToExprSource.set(name, meta.source);
+        if (meta?.ast) {
+          nameToExprAST.set(name, meta.ast);
         }
       }
     }
 
-    // 使用 AST 转换而不是字符串替换，以正确处理对象属性名等情况
+    // 解析用户输入的字符串为 AST
     const ast = parse(source as string);
+
+    // 在 AST 级别进行标识符替换
     const transformedAst = transformIdentifiers(ast, (name) => {
       // 检查是否是 context 中的变量
       const id = nameToId.get(name);
       if (id) {
+        // 返回占位符标识符名称
         return getVariablePlaceholder(id);
       }
 
-      // 检查是否是 context 中的表达式
-      const exprSource = nameToExprSource.get(name);
-      if (exprSource) {
-        return `(${exprSource})`;
+      // 检查是否是子表达式
+      const exprAST = nameToExprAST.get(name);
+      if (exprAST) {
+        // 返回 AST 节点以内联子表达式
+        return exprAST;
       }
 
-      // 保持原样
+      // 保持原样（可能是全局对象如 Math, JSON 等）
       return name;
     });
 
-    const transformedSource = generate(transformedAst);
-
-    return createProxyExpressionWithSource<InferExpressionResult<TSource, TContext>>(transformedSource, deps);
+    return createProxyExpressionWithAST<InferExpressionResult<TSource, TContext>>(transformedAst, deps);
   };
 }

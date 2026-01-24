@@ -1,4 +1,16 @@
 // proxy-variable.ts
+import type {
+  ArrayExpr,
+  ASTNode,
+  BooleanLiteral,
+  CallExpr,
+  Identifier,
+  MemberExpr,
+  NullLiteral,
+  NumberLiteral,
+  ObjectExpr,
+  StringLiteral,
+} from "./parser";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import type { Proxify } from "./types";
 
@@ -11,44 +23,79 @@ function getVariablePlaceholder(id: symbol): string {
 }
 
 /**
- * 序列化参数为表达式字符串
- * - Proxy Variable/Expression：使用源码或占位符
- * - 数组：递归处理元素
- * - 对象：递归处理属性
- * - 原始值：JSON.stringify
+ * 序列化参数为 AST 节点
+ * - Proxy Variable/Expression：使用 ast 或占位符标识符
+ * - 数组：返回 ArrayExpr 节点
+ * - 对象：返回 ObjectExpr 节点
+ * - 原始值：返回对应的字面量节点
  */
-export function serializeArgument(arg: unknown): string {
+export function serializeArgumentToAST(arg: unknown): ASTNode {
   // 1. 检查是否是 Proxy (通过 getProxyMetadata)
   // 注意：Proxy 包装的是函数，所以 typeof 可能是 "function" 或 "object"
   if ((typeof arg === "object" || typeof arg === "function") && arg !== null) {
     const meta = getProxyMetadata(arg);
     if (meta) {
-      // 如果有 source，直接返回（已是完整表达式）
-      if (meta.source) return meta.source;
-      // 否则是根 variable，用占位符
-      if (meta.rootVariable) return getVariablePlaceholder(meta.rootVariable);
+      // 如果有 ast，直接返回
+      if (meta.ast) return meta.ast;
+      // 否则是根 variable，返回占位符标识符
+      if (meta.rootVariable) {
+        return {
+          type: "Identifier",
+          name: getVariablePlaceholder(meta.rootVariable),
+        } as Identifier;
+      }
     }
   }
 
   // 2. 数组递归处理
   if (Array.isArray(arg)) {
-    return `[${arg.map(serializeArgument).join(", ")}]`;
+    return {
+      type: "ArrayExpr",
+      elements: arg.map(serializeArgumentToAST),
+    } as ArrayExpr;
   }
 
   // 3. 普通对象递归处理
   if (typeof arg === "object" && arg !== null) {
-    const entries = Object.entries(arg)
-      .map(([k, v]) => {
-        // 如果 key 需要引号（非有效标识符）
-        const safeKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
-        return `${safeKey}: ${serializeArgument(v)}`;
-      })
-      .join(", ");
-    return `{${entries}}`;
+    const properties = Object.entries(arg).map(([k, v]) => {
+      // 检查 key 是否为有效标识符
+      const isValidIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k);
+      const key: ASTNode = isValidIdentifier
+        ? ({ type: "Identifier", name: k } as Identifier)
+        : ({ type: "StringLiteral", value: k, quote: '"' } as StringLiteral);
+      const value = serializeArgumentToAST(v);
+      return {
+        key,
+        value,
+        computed: false,
+        shorthand: false,
+      };
+    });
+    return {
+      type: "ObjectExpr",
+      properties,
+    } as ObjectExpr;
   }
 
   // 4. 原始值（包括 null, undefined, number, string, boolean）
-  return JSON.stringify(arg);
+  if (arg === null) {
+    return { type: "NullLiteral" } as NullLiteral;
+  }
+  if (arg === undefined) {
+    return { type: "Identifier", name: "undefined" } as Identifier;
+  }
+  if (typeof arg === "boolean") {
+    return { type: "BooleanLiteral", value: arg } as BooleanLiteral;
+  }
+  if (typeof arg === "number") {
+    return { type: "NumberLiteral", value: arg, raw: String(arg) } as NumberLiteral;
+  }
+  if (typeof arg === "string") {
+    return { type: "StringLiteral", value: arg, quote: '"' } as StringLiteral;
+  }
+
+  // 其他类型（bigint, symbol 等）暂不支持
+  throw new Error(`Unsupported argument type: ${typeof arg}`);
 }
 
 /**
@@ -116,7 +163,21 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
  * @returns Proxy 包装的 Expression
  */
 export function createProxyExpression<T>(rootId: symbol, path: string[], deps: Set<symbol>): Proxify<T> {
-  const source = `${getVariablePlaceholder(rootId)}.${path.join(".")}`;
+  // 构建 MemberExpr AST 节点
+  let ast: ASTNode = {
+    type: "Identifier",
+    name: getVariablePlaceholder(rootId),
+  } as Identifier;
+
+  for (const prop of path) {
+    ast = {
+      type: "MemberExpr",
+      object: ast,
+      property: { type: "Identifier", name: prop } as Identifier,
+      computed: false,
+      optional: false,
+    } as MemberExpr;
+  }
 
   const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
     get(_target, prop) {
@@ -124,12 +185,17 @@ export function createProxyExpression<T>(rootId: symbol, path: string[], deps: S
       return createProxyExpression<unknown>(rootId, [...path, String(prop)], deps);
     },
     apply(_target, _thisArg, args) {
-      const serializedArgs = args.map(serializeArgument).join(", ");
-      const callSource = `${source}(${serializedArgs})`;
+      // 构建 CallExpr AST 节点
+      const callAst: CallExpr = {
+        type: "CallExpr",
+        callee: ast,
+        arguments: args.map(serializeArgumentToAST),
+        optional: false,
+      };
       // 收集参数中的依赖
       const newDeps = new Set(deps);
       collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithSource<T>(callSource, newDeps);
+      return createProxyExpressionWithAST<T>(callAst, newDeps);
     },
   });
 
@@ -137,7 +203,7 @@ export function createProxyExpression<T>(rootId: symbol, path: string[], deps: S
     type: "expression",
     path,
     rootVariable: rootId,
-    source,
+    ast,
     dependencies: deps,
   });
 
@@ -145,34 +211,45 @@ export function createProxyExpression<T>(rootId: symbol, path: string[], deps: S
 }
 
 /**
- * 创建带完整源码的 Proxy（方法调用后）
+ * 创建带完整 AST 的 Proxy（方法调用后）
  * 可以继续链式访问和调用
  *
- * @param source - 完整的表达式源码
+ * @param ast - 完整的表达式 AST
  * @param deps - 依赖集合
  * @returns Proxy 包装的 Expression
  */
-export function createProxyExpressionWithSource<T>(source: string, deps: Set<symbol>): Proxify<T> {
+export function createProxyExpressionWithAST<T>(ast: ASTNode, deps: Set<symbol>): Proxify<T> {
   const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
     get(_target, prop) {
       if (typeof prop === "symbol") return undefined;
-      // 继续访问：source.prop
-      const newSource = `(${source}).${String(prop)}`;
-      return createProxyExpressionWithSource<unknown>(newSource, deps);
+      // 继续访问：创建新的 MemberExpr
+      const newAst: MemberExpr = {
+        type: "MemberExpr",
+        object: ast,
+        property: { type: "Identifier", name: String(prop) } as Identifier,
+        computed: false,
+        optional: false,
+      };
+      return createProxyExpressionWithAST<unknown>(newAst, deps);
     },
     apply(_target, _thisArg, args) {
-      const serializedArgs = args.map(serializeArgument).join(", ");
-      const callSource = `(${source})(${serializedArgs})`;
+      // 创建 CallExpr AST 节点
+      const callAst: CallExpr = {
+        type: "CallExpr",
+        callee: ast,
+        arguments: args.map(serializeArgumentToAST),
+        optional: false,
+      };
       const newDeps = new Set(deps);
       collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithSource<T>(callSource, newDeps);
+      return createProxyExpressionWithAST<T>(callAst, newDeps);
     },
   });
 
   setProxyMetadata(proxy, {
     type: "expression",
-    path: [source],
-    source,
+    path: [], // AST 节点不再需要 path 信息
+    ast,
     dependencies: deps,
   });
 

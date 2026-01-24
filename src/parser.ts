@@ -947,11 +947,17 @@ function needsParens(child: ASTNode, parent: ASTNode, position: string): boolean
 
 /**
  * 转换 AST 中的标识符
+ * 回调函数可以返回：
+ * - string: 替换标识符名称
+ * - ASTNode: 内联该 AST 节点（用于子表达式内联）
  */
-export function transformIdentifiers(node: ASTNode, transform: (name: string) => string): ASTNode {
+export function transformIdentifiers(node: ASTNode, transform: (name: string) => string | ASTNode): ASTNode {
   switch (node.type) {
-    case "Identifier":
-      return { ...node, name: transform(node.name) };
+    case "Identifier": {
+      const result = transform(node.name);
+      // 如果返回 ASTNode，直接内联；否则替换名称
+      return typeof result === "string" ? { ...node, name: result } : result;
+    }
 
     case "BinaryExpr":
       return {

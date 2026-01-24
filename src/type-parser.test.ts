@@ -125,7 +125,7 @@ describe("type-parser 单元测试", () => {
 
       // 验证元数据
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
 
     test("expr 函数支持嵌套表达式", () => {
@@ -137,7 +137,7 @@ describe("type-parser 单元测试", () => {
       const meta = getProxyMetadata(_doubled as object);
 
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
 
     test("expr 函数正确推导比较表达式", () => {
@@ -147,7 +147,7 @@ describe("type-parser 单元测试", () => {
       const meta = getProxyMetadata(_isAdult as object);
 
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
 
     test("expr 函数正确推导复杂表达式", () => {
@@ -159,7 +159,7 @@ describe("type-parser 单元测试", () => {
       const meta = getProxyMetadata(_complex as object);
 
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
 
     test("expr 函数正确推导逻辑表达式", () => {
@@ -171,7 +171,7 @@ describe("type-parser 单元测试", () => {
 
       // 逻辑表达式最终返回 boolean
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
 
     test("expr 函数处理字符串表达式", () => {
@@ -182,7 +182,7 @@ describe("type-parser 单元测试", () => {
       const meta = getProxyMetadata(_fullName as object);
 
       expect(meta?.type).toBe("expression");
-      expect(meta?.source).toBeDefined();
+      expect(meta?.ast).toBeDefined();
     });
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, expr, t, variable } from "./index";
+import { generate } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 
 describe("模板标签 单元测试", () => {
@@ -9,7 +10,11 @@ describe("模板标签 单元测试", () => {
 
     const meta = getProxyMetadata(greeting as object);
     expect(meta?.type).toBe("expression");
-    expect(meta?.source).toContain("Hello");
+    expect(meta?.ast).toBeDefined();
+    if (meta?.ast) {
+      const source = generate(meta.ast);
+      expect(source).toContain("Hello");
+    }
   });
 
   test("编译简单模板", () => {

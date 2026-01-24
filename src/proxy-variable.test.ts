@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, variable } from "./index";
+import { generate } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 
 describe("代理变量 单元测试", () => {
@@ -20,7 +21,11 @@ describe("代理变量 单元测试", () => {
 
     const meta = getProxyMetadata(timeout as object);
     expect(meta?.type).toBe("expression");
-    expect(meta?.source).toContain("timeout");
+    expect(meta?.ast).toBeDefined();
+    if (meta?.ast) {
+      const source = generate(meta.ast);
+      expect(source).toContain("timeout");
+    }
   });
 
   test("编译属性访问", () => {
@@ -44,7 +49,11 @@ describe("代理变量 单元测试", () => {
 
     const meta = getProxyMetadata(result as object);
     expect(meta?.type).toBe("expression");
-    expect(meta?.source).toContain("build");
+    expect(meta?.ast).toBeDefined();
+    if (meta?.ast) {
+      const source = generate(meta.ast);
+      expect(source).toContain("build");
+    }
   });
 
   test("编译字面量参数的方法调用", () => {
@@ -138,8 +147,12 @@ describe("代理变量 单元测试", () => {
     const configured = ui.configure({ padding: 10, margin: 5 });
 
     const meta = getProxyMetadata(configured as object);
-    expect(meta?.source).toContain("padding");
-    expect(meta?.source).toContain("margin");
+    expect(meta?.ast).toBeDefined();
+    if (meta?.ast) {
+      const source = generate(meta.ast);
+      expect(source).toContain("padding");
+      expect(source).toContain("margin");
+    }
   });
 
   test("支持混合变量和字面量参数", () => {

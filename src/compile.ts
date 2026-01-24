@@ -1,5 +1,5 @@
-import { generate, parse, type ASTNode } from "./parser";
-import { serializeArgument } from "./proxy-variable";
+import { generate, transformIdentifiers, type ASTNode } from "./parser";
+import { serializeArgumentToAST } from "./proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, JumpNode, LambdaBodyResult, PhiNode } from "./types";
 import { getVariableId } from "./variable";
 
@@ -35,34 +35,6 @@ export interface CompileOptions {
 }
 
 /**
- * 将占位符替换为实际变量名
- *
- * @param source - 包含占位符的表达式源码
- * @param context - 变量名到值的映射
- * @returns 替换后的源码
- */
-function preprocessExpression(source: string, context: Record<string, unknown>): string {
-  // 建立 Symbol description -> 变量名 映射
-  const descToName = new Map<string, string>();
-
-  for (const [name, value] of Object.entries(context)) {
-    const id = getVariableId(value);
-    if (id && id.description) {
-      descToName.set(id.description, name);
-    }
-  }
-
-  // 替换 $$VAR_xxx$$ 占位符
-  return source.replace(/\$\$VAR_([^$]+)\$\$/g, (match, desc: string) => {
-    const name = descToName.get(desc);
-    if (!name) {
-      throw new Error(`Unknown variable placeholder: ${match}`);
-    }
-    return name;
-  });
-}
-
-/**
  * 将 Proxy Expression 编译为可序列化的 JSON 结构
  *
  * @template TResult - 表达式结果类型
@@ -90,9 +62,8 @@ export function compile<TResult>(
 ): CompiledData {
   const { shortCircuit = true } = options;
 
-  // 序列化并预处理：支持 Proxy, Object, Array 和原始值
-  const rawSource = serializeArgument(expression);
-  const source = preprocessExpression(rawSource, variables);
+  // 序列化：支持 Proxy, Object, Array 和原始值
+  const ast = serializeArgumentToAST(expression);
 
   // 建立变量名到索引的映射
   const variableOrder: string[] = [];
@@ -105,21 +76,40 @@ export function compile<TResult>(
     }
   }
 
-  // 解析表达式为 AST
-  const ast = parse(source);
+  // 建立 Symbol description -> 变量名 映射（用于占位符替换）
+  const descToName = new Map<string, string>();
+  for (const [name, value] of Object.entries(variables)) {
+    const id = getVariableId(value);
+    if (id && id.description) {
+      descToName.set(id.description, name);
+    }
+  }
 
-  // 转换 AST：将变量引用替换为 $N
+  // 转换 AST：将占位符替换为变量名，然后替换为 $N
   const undefinedVars: string[] = [];
   const transformed = transformIdentifiers(ast, (name) => {
+    // 1. 如果是占位符，先替换为变量名
+    const placeholderMatch = name.match(/^\$\$VAR_(.+)\$\$$/);
+    if (placeholderMatch) {
+      const desc = placeholderMatch[1];
+      const varName = descToName.get(desc!);
+      if (!varName) {
+        throw new Error(`Unknown variable placeholder: ${name}`);
+      }
+      name = varName;
+    }
+
+    // 2. 将变量名替换为 $N
     const index = variableToIndex.get(name);
     if (index !== undefined) {
-      return { type: "Identifier", name: `$${index}` } as ASTNode;
+      return `$${index}`;
     }
-    // 检查是否为允许的全局对象
+
+    // 3. 检查是否为允许的全局对象
     if (!ALLOWED_GLOBALS.has(name)) {
       undefinedVars.push(name);
     }
-    return null;
+    return name;
   });
 
   if (undefinedVars.length > 0) {
@@ -214,87 +204,4 @@ export function compile<TResult>(
   }
 
   return [variableOrder, ...expressions];
-}
-
-/**
- * 将 AST 中的标识符替换为对应的 AST 节点
- *
- * @param node - 要转换的 AST 节点
- * @param getReplacementAst - 根据标识符名称返回替换的 AST 节点，返回 null 表示不替换
- * @returns 转换后的 AST 节点
- */
-function transformIdentifiers(node: ASTNode, getReplacementAst: (name: string) => ASTNode | null): ASTNode {
-  switch (node.type) {
-    case "Identifier": {
-      const replacement = getReplacementAst(node.name);
-      return replacement ?? node;
-    }
-
-    case "BinaryExpr":
-      return {
-        ...node,
-        left: transformIdentifiers(node.left, getReplacementAst),
-        right: transformIdentifiers(node.right, getReplacementAst),
-      };
-
-    case "UnaryExpr":
-      return {
-        ...node,
-        argument: transformIdentifiers(node.argument, getReplacementAst),
-      };
-
-    case "ConditionalExpr":
-      return {
-        ...node,
-        test: transformIdentifiers(node.test, getReplacementAst),
-        consequent: transformIdentifiers(node.consequent, getReplacementAst),
-        alternate: transformIdentifiers(node.alternate, getReplacementAst),
-      };
-
-    case "MemberExpr":
-      return {
-        ...node,
-        object: transformIdentifiers(node.object, getReplacementAst),
-        property: node.computed ? transformIdentifiers(node.property, getReplacementAst) : node.property,
-      };
-
-    case "CallExpr":
-      return {
-        ...node,
-        callee: transformIdentifiers(node.callee, getReplacementAst),
-        arguments: node.arguments.map((arg) => transformIdentifiers(arg, getReplacementAst)),
-      };
-
-    case "ArrayExpr":
-      return {
-        ...node,
-        elements: node.elements.map((el) => transformIdentifiers(el, getReplacementAst)),
-      };
-
-    case "ObjectExpr":
-      return {
-        ...node,
-        properties: node.properties.map((prop) => ({
-          ...prop,
-          key: prop.computed ? transformIdentifiers(prop.key, getReplacementAst) : prop.key,
-          value: transformIdentifiers(prop.value, getReplacementAst),
-        })),
-      };
-
-    case "ArrowFunctionExpr": {
-      // 箭头函数：参数名不替换，只替换函数体中的非参数标识符
-      const paramNames = new Set(node.params.map((p) => p.name));
-      return {
-        ...node,
-        body: transformIdentifiers(node.body, (name) => {
-          // 如果是参数名，不替换
-          if (paramNames.has(name)) return null;
-          return getReplacementAst(name);
-        }),
-      };
-    }
-
-    default:
-      return node;
-  }
 }

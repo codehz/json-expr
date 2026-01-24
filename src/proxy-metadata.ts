@@ -1,4 +1,5 @@
 // proxy-metadata.ts
+import type { ASTNode } from "./parser";
 
 /**
  * Proxy 元数据接口
@@ -6,7 +7,7 @@
 export interface ProxyMetadata {
   type: "variable" | "expression";
   path: string[]; // 表达式路径，如 ["ui", "Text"]
-  source?: string; // 完整表达式源码（expression 类型）
+  ast?: ASTNode; // 完整表达式 AST（expression 类型）
   rootVariable?: symbol; // 根 variable 的唯一标识
   dependencies?: Set<symbol>; // 依赖的所有 variable Symbol
 }

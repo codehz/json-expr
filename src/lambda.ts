@@ -1,10 +1,11 @@
 // lambda.ts
+import { transformIdentifiers, type ASTNode } from "./parser";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import {
   collectDepsFromArgs,
-  createProxyExpressionWithSource,
+  createProxyExpressionWithAST,
   createProxyVariable,
-  serializeArgument,
+  serializeArgumentToAST,
 } from "./proxy-variable";
 import type { Lambda, LambdaBuilder, Proxify } from "./types";
 
@@ -48,13 +49,6 @@ function createLambdaParam<T>(index: number): Proxify<T> {
 }
 
 /**
- * 转义正则表达式特殊字符
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
  * 创建类型安全的 lambda 表达式
  *
  * @template Args - 参数类型元组
@@ -92,9 +86,9 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
   // 2. 调用 builder 获取函数体表达式
   const bodyExpr = builder(...(params as Parameters<LambdaBuilder<Args, R>>));
 
-  // 3. 从 bodyExpr 中提取源码和依赖
+  // 3. 从 bodyExpr 中提取 AST 和依赖
   //    支持返回 Proxy 表达式、普通对象/数组、或原始值
-  let bodySource: string;
+  let bodyAst: ASTNode;
   let bodyDeps: Set<symbol>;
 
   const meta =
@@ -102,32 +96,39 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
       ? getProxyMetadata(bodyExpr as object)
       : undefined;
 
-  if (meta?.source) {
-    // Proxy 表达式：使用其源码和依赖
-    bodySource = meta.source;
+  if (meta?.ast) {
+    // Proxy 表达式：使用其 AST 和依赖
+    bodyAst = meta.ast;
     bodyDeps = meta.dependencies ?? new Set<symbol>();
   } else {
-    // 普通对象、数组或原始值：使用 serializeArgument 转换
+    // 普通对象、数组或原始值：使用 serializeArgumentToAST 转换
     // 并收集其中可能包含的 Proxy 变量依赖
-    bodySource = serializeArgument(bodyExpr);
+    bodyAst = serializeArgumentToAST(bodyExpr);
     bodyDeps = new Set<symbol>();
     collectDepsFromArgs([bodyExpr], bodyDeps);
   }
 
-  // 4. 将参数占位符替换为实际参数名 (_0, _1, _2...)
-  let lambdaBody = bodySource;
-  for (let i = 0; i < paramSymbols.length; i++) {
-    const sym = paramSymbols[i];
-    if (!sym) continue;
-    // 占位符格式：$$VAR_lambda_param_N_INDEX$$
-    const placeholder = `$$VAR_${sym.description}$$`;
-    const paramName = `_${i}`;
-    lambdaBody = lambdaBody.replace(new RegExp(escapeRegex(placeholder), "g"), paramName);
-  }
+  // 4. 将参数占位符标识符转换为实际参数名 (_0, _1, _2...)
+  const transformedBodyAst = transformIdentifiers(bodyAst, (name) => {
+    for (let i = 0; i < paramSymbols.length; i++) {
+      const sym = paramSymbols[i];
+      if (!sym) continue;
+      // 占位符格式：$$VAR_lambda_param_N_INDEX$$
+      const placeholder = `$$VAR_${sym.description}$$`;
+      if (name === placeholder) {
+        return `_${i}`;
+      }
+    }
+    return name;
+  });
 
-  // 5. 构造完整的箭头函数源码
-  const paramList = params.map((_, i) => `_${i}`).join(",");
-  const lambdaSource = paramCount === 1 ? `${paramList}=>${lambdaBody}` : `(${paramList})=>${lambdaBody}`;
+  // 5. 构造完整的箭头函数 AST
+  const paramIdentifiers = params.map((_, i) => ({ type: "Identifier" as const, name: `_${i}` }));
+  const arrowFunctionAst: ASTNode = {
+    type: "ArrowFunctionExpr",
+    params: paramIdentifiers,
+    body: transformedBodyAst,
+  };
 
   // 6. 过滤掉 lambda 参数依赖，只保留外部闭包变量
   const closureDeps = new Set<symbol>();
@@ -137,15 +138,15 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
     }
   }
 
-  // 7. 返回包含 lambda 源码的 Proxy
-  const lambdaProxy = createProxyExpressionWithSource<(...args: Args) => R>(lambdaSource, closureDeps);
+  // 7. 返回包含 lambda AST 的 Proxy
+  const lambdaProxy = createProxyExpressionWithAST<(...args: Args) => R>(arrowFunctionAst, closureDeps);
 
   // 8. 设置额外的 lambda 元数据（标记为 lambda 类型）
   const existingMeta = getProxyMetadata(lambdaProxy as object);
   if (existingMeta) {
     setProxyMetadata(lambdaProxy as object, {
       ...existingMeta,
-      type: "expression", // 保持为 expression，但源码包含箭头函数
+      type: "expression", // 保持为 expression，但 AST 包含箭头函数
     });
   }
 
