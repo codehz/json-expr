@@ -19,124 +19,69 @@ export type ProxifyArgs<T extends unknown[]> = {
 };
 
 /**
+ * 需要特殊处理的数组方法名（有泛型参数，需要显式定义以保留类型推导）
+ */
+type ProxifiedArrayMethods =
+  | "map"
+  | "flatMap"
+  | "filter"
+  | "reduce"
+  | "reduceRight"
+  | "find"
+  | "findIndex"
+  | "findLast"
+  | "findLastIndex"
+  | "every"
+  | "some"
+  | "forEach"
+  | "toSorted"
+  | "sort";
+
+/**
  * 数组类型的 Proxify 版本
  * 特殊处理泛型方法（map, filter 等），确保返回值类型正确
  */
 export type ProxifiedArray<T> = {
-  // 泛型方法需要显式定义以保留泛型参数
-  map<U>(
-    callbackfn: Proxify<(value: T, index: number, array: T[]) => U> | ((value: T, index: number, array: T[]) => U)
-  ): Proxify<U[]>;
-  flatMap<U>(
-    callbackfn:
-      | Proxify<(value: T, index: number, array: T[]) => U | readonly U[]>
-      | ((value: T, index: number, array: T[]) => U | readonly U[])
-  ): Proxify<U[]>;
-  filter<S extends T>(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => value is S>
-      | ((value: T, index: number, array: T[]) => value is S)
-  ): Proxify<S[]>;
-  filter(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => unknown>
-      | ((value: T, index: number, array: T[]) => unknown)
-  ): Proxify<T[]>;
+  map<U>(callbackfn: Proxify<(value: T, index: number, array: T[]) => U>): Proxify<U[]>;
+  flatMap<U>(callbackfn: Proxify<(value: T, index: number, array: T[]) => U | readonly U[]>): Proxify<U[]>;
+
+  filter<S extends T>(predicate: Proxify<(value: T, index: number, array: T[]) => value is S>): Proxify<S[]>;
+  filter(predicate: Proxify<(value: T, index: number, array: T[]) => unknown>): Proxify<T[]>;
+
   reduce<U>(
-    callbackfn:
-      | Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>
-      | ((previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U),
+    callbackfn: Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>,
     initialValue: U | Proxify<U>
   ): Proxify<U>;
-  reduce(
-    callbackfn:
-      | Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>
-      | ((previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T)
-  ): Proxify<T>;
+  reduce(callbackfn: Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>): Proxify<T>;
+
   reduceRight<U>(
-    callbackfn:
-      | Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>
-      | ((previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U),
+    callbackfn: Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>,
     initialValue: U | Proxify<U>
   ): Proxify<U>;
   reduceRight(
-    callbackfn:
-      | Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>
-      | ((previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T)
+    callbackfn: Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>
   ): Proxify<T>;
-  find<S extends T>(
-    predicate:
-      | Proxify<(value: T, index: number, obj: T[]) => value is S>
-      | ((value: T, index: number, obj: T[]) => value is S)
-  ): Proxify<S | undefined>;
-  find(
-    predicate:
-      | Proxify<(value: T, index: number, obj: T[]) => unknown>
-      | ((value: T, index: number, obj: T[]) => unknown)
-  ): Proxify<T | undefined>;
-  findIndex(
-    predicate:
-      | Proxify<(value: T, index: number, obj: T[]) => unknown>
-      | ((value: T, index: number, obj: T[]) => unknown)
-  ): Proxify<number>;
+
+  find<S extends T>(predicate: Proxify<(value: T, index: number, obj: T[]) => value is S>): Proxify<S | undefined>;
+  find(predicate: Proxify<(value: T, index: number, obj: T[]) => unknown>): Proxify<T | undefined>;
+  findIndex(predicate: Proxify<(value: T, index: number, obj: T[]) => unknown>): Proxify<number>;
   findLast<S extends T>(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => value is S>
-      | ((value: T, index: number, array: T[]) => value is S)
+    predicate: Proxify<(value: T, index: number, array: T[]) => value is S>
   ): Proxify<S | undefined>;
-  findLast(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => unknown>
-      | ((value: T, index: number, array: T[]) => unknown)
-  ): Proxify<T | undefined>;
-  findLastIndex(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => unknown>
-      | ((value: T, index: number, array: T[]) => unknown)
-  ): Proxify<number>;
-  every<S extends T>(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => value is S>
-      | ((value: T, index: number, array: T[]) => value is S)
-  ): Proxify<boolean>;
-  every(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => unknown>
-      | ((value: T, index: number, array: T[]) => unknown)
-  ): Proxify<boolean>;
-  some(
-    predicate:
-      | Proxify<(value: T, index: number, array: T[]) => unknown>
-      | ((value: T, index: number, array: T[]) => unknown)
-  ): Proxify<boolean>;
-  forEach(
-    callbackfn: Proxify<(value: T, index: number, array: T[]) => void> | ((value: T, index: number, array: T[]) => void)
-  ): Proxify<void>;
-  toSorted(compareFn?: Proxify<(a: T, b: T) => number> | ((a: T, b: T) => number)): Proxify<T[]>;
-  sort(compareFn?: Proxify<(a: T, b: T) => number> | ((a: T, b: T) => number)): Proxify<T[]>;
+  findLast(predicate: Proxify<(value: T, index: number, array: T[]) => unknown>): Proxify<T | undefined>;
+  findLastIndex(predicate: Proxify<(value: T, index: number, array: T[]) => unknown>): Proxify<number>;
+
+  every<S extends T>(predicate: Proxify<(value: T, index: number, array: T[]) => value is S>): Proxify<boolean>;
+  every(predicate: Proxify<(value: T, index: number, array: T[]) => unknown>): Proxify<boolean>;
+  some(predicate: Proxify<(value: T, index: number, array: T[]) => unknown>): Proxify<boolean>;
+
+  forEach(callbackfn: Proxify<(value: T, index: number, array: T[]) => void>): Proxify<void>;
+
+  toSorted(compareFn?: Proxify<(a: T, b: T) => number>): Proxify<T[]>;
+  sort(compareFn?: Proxify<(a: T, b: T) => number>): Proxify<T[]>;
 } & {
   // 其他非泛型属性使用默认映射
-  [K in Exclude<keyof T[], keyof ProxifiedArrayMethods<T>>]: Proxify<T[][K]>;
-};
-
-/**
- * 数组泛型方法的键（用于排除）
- */
-type ProxifiedArrayMethods<T> = {
-  map: unknown;
-  flatMap: unknown;
-  filter: unknown;
-  reduce: unknown;
-  reduceRight: unknown;
-  find: unknown;
-  findIndex: unknown;
-  findLast: unknown;
-  findLastIndex: unknown;
-  every: unknown;
-  some: unknown;
-  forEach: unknown;
-  toSorted: unknown;
-  sort: unknown;
+  [K in Exclude<keyof T[], ProxifiedArrayMethods>]: Proxify<T[][K]>;
 };
 
 /**
