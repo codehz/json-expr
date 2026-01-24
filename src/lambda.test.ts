@@ -1,11 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, expr, lambda, variable, type ProxyExpression } from "./index";
-
-// 辅助类型：将 Proxy 表达式转换为可编译类型
-// 由于 Proxy 类型系统与 TypeScript 内置数组类型的兼容性问题，需要使用类型断言
-// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-type Compilable<T> = ProxyExpression<T> & any;
+import { compile, evaluate, expr, lambda, variable } from "./index";
 
 describe("lambda 函数", () => {
   describe("基础功能", () => {
@@ -13,7 +8,7 @@ describe("lambda 函数", () => {
       const numbers = variable<number[]>();
       const doubled = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 
-      const compiled = compile(doubled as Compilable<number[]>, { numbers });
+      const compiled = compile(doubled, { numbers });
       expect(compiled[0]).toEqual(["numbers"]);
       // 表达式包含箭头函数
       expect(compiled[1]).toContain("=>");
@@ -29,7 +24,7 @@ describe("lambda 函数", () => {
         0
       );
 
-      const compiled = compile(sum as Compilable<number>, { numbers });
+      const compiled = compile(sum, { numbers });
       expect(compiled[0]).toEqual(["numbers"]);
 
       const result = evaluate(compiled, { numbers: [1, 2, 3, 4, 5] });
@@ -40,7 +35,7 @@ describe("lambda 函数", () => {
       const items = variable<{ value: number }[]>();
       const values = items.map(lambda<[{ value: number }], number>((item) => item.value));
 
-      const compiled = compile(values as Compilable<number[]>, { items });
+      const compiled = compile(values, { items });
       const result = evaluate(compiled, { items: [{ value: 1 }, { value: 2 }, { value: 3 }] });
       expect(result).toEqual([1, 2, 3]);
     });
@@ -53,7 +48,7 @@ describe("lambda 函数", () => {
 
       const scaled = numbers.map(lambda<[number], number>((n) => expr({ n, multiplier })("n * multiplier")));
 
-      const compiled = compile(scaled as Compilable<number[]>, { numbers, multiplier });
+      const compiled = compile(scaled, { numbers, multiplier });
       expect(compiled[0]).toContain("numbers");
       expect(compiled[0]).toContain("multiplier");
 
@@ -70,7 +65,7 @@ describe("lambda 函数", () => {
         lambda<[number], number>((n) => expr({ n, offset, scale })("(n + offset) * scale"))
       );
 
-      const compiled = compile(transformed as Compilable<number[]>, { numbers, offset, scale });
+      const compiled = compile(transformed, { numbers, offset, scale });
 
       const result = evaluate(compiled, { numbers: [1, 2, 3], offset: 5, scale: 2 });
       expect(result).toEqual([12, 14, 16]); // (1+5)*2=12, (2+5)*2=14, (3+5)*2=16
@@ -84,7 +79,7 @@ describe("lambda 函数", () => {
 
       const filtered = numbers.filter(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")));
 
-      const compiled = compile(filtered as Compilable<number[]>, { numbers, threshold });
+      const compiled = compile(filtered, { numbers, threshold });
       const result = evaluate(compiled, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 });
       expect(result).toEqual([5, 8, 7]);
     });
@@ -97,7 +92,7 @@ describe("lambda 函数", () => {
         lambda<[{ id: number; name: string }], boolean>((item) => expr({ item, targetId })("item.id === targetId"))
       );
 
-      const compiled = compile(found as Compilable<{ id: number; name: string } | undefined>, { items, targetId });
+      const compiled = compile(found, { items, targetId });
       const result = evaluate(compiled, {
         items: [
           { id: 1, name: "a" },
@@ -113,7 +108,7 @@ describe("lambda 函数", () => {
       const numbers = variable<number[]>();
       const hasPositive = numbers.some(lambda<[number], boolean>((n) => expr({ n })("n > 0")));
 
-      const compiled = compile(hasPositive as Compilable<boolean>, { numbers });
+      const compiled = compile(hasPositive, { numbers });
       expect(evaluate<boolean>(compiled, { numbers: [-1, -2, 3] })).toBe(true);
       expect(evaluate<boolean>(compiled, { numbers: [-1, -2, -3] })).toBe(false);
     });
@@ -122,7 +117,7 @@ describe("lambda 函数", () => {
       const numbers = variable<number[]>();
       const allPositive = numbers.every(lambda<[number], boolean>((n) => expr({ n })("n > 0")));
 
-      const compiled = compile(allPositive as Compilable<boolean>, { numbers });
+      const compiled = compile(allPositive, { numbers });
       expect(evaluate<boolean>(compiled, { numbers: [1, 2, 3] })).toBe(true);
       expect(evaluate<boolean>(compiled, { numbers: [1, -2, 3] })).toBe(false);
     });
@@ -130,9 +125,9 @@ describe("lambda 函数", () => {
     test("sort", () => {
       const numbers = variable<number[]>();
 
-      const sorted = numbers.toSorted(lambda<[number, number], number>((a, b) => expr({ a, b })("a - b")) as any);
+      const sorted = numbers.toSorted(lambda<[number, number], number>((a, b) => expr({ a, b })("a - b")));
 
-      const compiled = compile(sorted as Compilable<number[]>, { numbers });
+      const compiled = compile(sorted, { numbers });
       const result = evaluate(compiled, { numbers: [3, 1, 4, 1, 5, 9, 2, 6] });
       expect(result).toEqual([1, 1, 2, 3, 4, 5, 6, 9]);
     });
@@ -148,7 +143,7 @@ describe("lambda 函数", () => {
         )
       );
 
-      const compiled = compile(indexed as Compilable<{ item: string; index: number }[]>, { items });
+      const compiled = compile(indexed, { items });
       const result = evaluate(compiled, { items: ["a", "b", "c"] });
       expect(result).toEqual([
         { item: "a", index: 0 },
@@ -199,7 +194,7 @@ describe("lambda 函数", () => {
         .filter(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")))
         .map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 
-      const compiled = compile(result as Compilable<number[]>, { numbers, threshold });
+      const compiled = compile(result, { numbers, threshold });
       const evaluated = evaluate(compiled, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 });
       expect(evaluated).toEqual([10, 16, 14]); // [5, 8, 7] * 2
     });
@@ -221,7 +216,7 @@ describe("parser 箭头函数支持", () => {
     // 直接使用生成的箭头函数源码
     const result = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 
-    const compiled = compile(result as Compilable<number[]>, { numbers });
+    const compiled = compile(result, { numbers });
     const exprStr = compiled[1] as string;
     expect(exprStr).toMatch(/_0=>/);
   });
@@ -233,7 +228,7 @@ describe("parser 箭头函数支持", () => {
       0
     );
 
-    const compiled = compile(result as Compilable<number>, { numbers });
+    const compiled = compile(result, { numbers });
     const exprStr = compiled[1] as string;
     expect(exprStr).toMatch(/\(_0,_1\)=>/);
   });

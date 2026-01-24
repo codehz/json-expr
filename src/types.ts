@@ -19,18 +19,142 @@ export type ProxifyArgs<T extends unknown[]> = {
 };
 
 /**
+ * 数组类型的 Proxify 版本
+ * 特殊处理泛型方法（map, filter 等），确保返回值类型正确
+ */
+export type ProxifiedArray<T> = {
+  // 泛型方法需要显式定义以保留泛型参数
+  map<U>(
+    callbackfn: Proxify<(value: T, index: number, array: T[]) => U> | ((value: T, index: number, array: T[]) => U)
+  ): Proxify<U[]>;
+  flatMap<U>(
+    callbackfn:
+      | Proxify<(value: T, index: number, array: T[]) => U | readonly U[]>
+      | ((value: T, index: number, array: T[]) => U | readonly U[])
+  ): Proxify<U[]>;
+  filter<S extends T>(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => value is S>
+      | ((value: T, index: number, array: T[]) => value is S)
+  ): Proxify<S[]>;
+  filter(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => unknown>
+      | ((value: T, index: number, array: T[]) => unknown)
+  ): Proxify<T[]>;
+  reduce<U>(
+    callbackfn:
+      | Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>
+      | ((previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U),
+    initialValue: U | Proxify<U>
+  ): Proxify<U>;
+  reduce(
+    callbackfn:
+      | Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>
+      | ((previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T)
+  ): Proxify<T>;
+  reduceRight<U>(
+    callbackfn:
+      | Proxify<(previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U>
+      | ((previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U),
+    initialValue: U | Proxify<U>
+  ): Proxify<U>;
+  reduceRight(
+    callbackfn:
+      | Proxify<(previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T>
+      | ((previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T)
+  ): Proxify<T>;
+  find<S extends T>(
+    predicate:
+      | Proxify<(value: T, index: number, obj: T[]) => value is S>
+      | ((value: T, index: number, obj: T[]) => value is S)
+  ): Proxify<S | undefined>;
+  find(
+    predicate:
+      | Proxify<(value: T, index: number, obj: T[]) => unknown>
+      | ((value: T, index: number, obj: T[]) => unknown)
+  ): Proxify<T | undefined>;
+  findIndex(
+    predicate:
+      | Proxify<(value: T, index: number, obj: T[]) => unknown>
+      | ((value: T, index: number, obj: T[]) => unknown)
+  ): Proxify<number>;
+  findLast<S extends T>(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => value is S>
+      | ((value: T, index: number, array: T[]) => value is S)
+  ): Proxify<S | undefined>;
+  findLast(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => unknown>
+      | ((value: T, index: number, array: T[]) => unknown)
+  ): Proxify<T | undefined>;
+  findLastIndex(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => unknown>
+      | ((value: T, index: number, array: T[]) => unknown)
+  ): Proxify<number>;
+  every<S extends T>(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => value is S>
+      | ((value: T, index: number, array: T[]) => value is S)
+  ): Proxify<boolean>;
+  every(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => unknown>
+      | ((value: T, index: number, array: T[]) => unknown)
+  ): Proxify<boolean>;
+  some(
+    predicate:
+      | Proxify<(value: T, index: number, array: T[]) => unknown>
+      | ((value: T, index: number, array: T[]) => unknown)
+  ): Proxify<boolean>;
+  forEach(
+    callbackfn: Proxify<(value: T, index: number, array: T[]) => void> | ((value: T, index: number, array: T[]) => void)
+  ): Proxify<void>;
+  toSorted(compareFn?: Proxify<(a: T, b: T) => number> | ((a: T, b: T) => number)): Proxify<T[]>;
+  sort(compareFn?: Proxify<(a: T, b: T) => number> | ((a: T, b: T) => number)): Proxify<T[]>;
+} & {
+  // 其他非泛型属性使用默认映射
+  [K in Exclude<keyof T[], keyof ProxifiedArrayMethods<T>>]: Proxify<T[][K]>;
+};
+
+/**
+ * 数组泛型方法的键（用于排除）
+ */
+type ProxifiedArrayMethods<T> = {
+  map: unknown;
+  flatMap: unknown;
+  filter: unknown;
+  reduce: unknown;
+  reduceRight: unknown;
+  find: unknown;
+  findIndex: unknown;
+  findLast: unknown;
+  findLastIndex: unknown;
+  every: unknown;
+  some: unknown;
+  forEach: unknown;
+  toSorted: unknown;
+  sort: unknown;
+};
+
+/**
  * 将类型 T 转换为 Proxy 包装类型
  * - 始终包含 ProxyExpression<T> 标记，用于 compile 函数类型检查
  * - 函数类型：保持函数签名，但参数允许 Proxy 或原始值，返回值递归应用 Proxify
+ * - 数组类型：使用 ProxifiedArray 特殊处理泛型方法
  * - 对象类型：映射所有属性为 Proxify
  * - 原始类型：保持不变（返回 ProxyExpression 包装）
  */
 export type Proxify<T> = ProxyExpression<T> &
   (T extends (...args: infer Args) => infer R
     ? (...args: ProxifyArgs<Args>) => Proxify<R>
-    : T extends object
-      ? { [K in keyof T]: Proxify<T[K]> }
-      : unknown);
+    : T extends readonly (infer E)[]
+      ? ProxifiedArray<E>
+      : T extends object
+        ? { [K in keyof T]: Proxify<T[K]> }
+        : unknown);
 
 /**
  * Variable 类型定义
