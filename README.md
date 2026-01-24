@@ -13,6 +13,9 @@
 - 🧩 **可组合** - 表达式可以相互组合，形成复杂的计算树
 - 🔄 **短路求值** - 支持 `&&`、`||`、`??` 和三元表达式的控制流优化
 - 📝 **内联优化** - 自动内联只被引用一次的子表达式
+- 🔗 **Proxy 变量系统** - 支持链式属性访问和方法调用，如 `config.timeout`、`user.profile.name`
+- 🎛️ **Lambda 表达式** - 类型安全的数组方法支持（map、filter、reduce 等）
+- 🛡️ **错误检测** - 编译时检测未定义变量和类型错误
 
 ## 快速开始
 
@@ -25,7 +28,7 @@ bun install @codehz/json-expr
 ### 基本用法
 
 ```typescript
-import { variable, expr, compile, evaluate } from "@codehz/json-expr";
+import { variable, expr, compile, evaluate, t, lambda } from "@codehz/json-expr";
 
 // 定义类型化变量（使用 TypeScript 泛型）
 const x = variable<number>();
@@ -43,6 +46,14 @@ const compiled = compile(result, { x, y });
 // 执行编译后的表达式
 const value = evaluate(compiled, { x: 2, y: 3 });
 // => 11  (2+3 + 2*3 = 5 + 6 = 11)
+
+// 使用模板字符串
+const name = variable<string>();
+const greeting = t`Hello, ${name}!`;
+
+// 使用 lambda 表达式
+const numbers = variable<number[]>();
+const doubled = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 ```
 
 ## 核心概念
@@ -215,7 +226,125 @@ const result = evaluate(compiled, { name: "Alice" });
 // => "Hello, Alice!"
 ```
 
+### `lambda<Args, R>(builder: LambdaBuilder<Args, R>): Lambda<Args, R>`
+
+创建类型安全的 lambda 表达式，用于数组方法（map、filter、reduce 等）。
+
+**参数：**
+
+- `builder` - Lambda 构建函数，接收参数代理，返回函数体表达式
+
+**返回值：** Lambda 表达式，可在数组方法中使用
+
+**示例：**
+
+```typescript
+import { lambda } from "@codehz/json-expr";
+
+// 单参数 lambda
+const numbers = variable<number[]>();
+const doubled = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
+
+const compiled = compile(doubled, { numbers });
+const result = evaluate(compiled, { numbers: [1, 2, 3] });
+// => [2, 4, 6]
+
+// 多参数 lambda（reduce）
+const sum = numbers.reduce(
+  lambda<[number, number], number>((acc, val) => expr({ acc, val })("acc + val")),
+  0
+);
+
+// 捕获外部变量
+const multiplier = variable<number>();
+const scaled = numbers.map(lambda<[number], number>((n) => expr({ n, multiplier })("n * multiplier")));
+```
+
 ## 高级用法
+
+### Proxy 变量系统
+
+`variable()` 创建的变量是 Proxy 对象，支持链式属性访问和方法调用，所有操作都会自动转换为表达式。
+
+**属性访问：**
+
+```typescript
+const config = variable<{
+  timeout: number;
+  retries: number;
+  database: {
+    host: string;
+    port: number;
+  };
+}>();
+
+// 链式属性访问
+const timeout = config.timeout; // 自动转换为表达式
+const dbHost = config.database.host; // 支持嵌套访问
+
+const compiled = compile(timeout, { config });
+const result = evaluate(compiled, {
+  config: { timeout: 5000, retries: 3, database: { host: "localhost", port: 5432 } },
+});
+// => 5000
+```
+
+**方法调用：**
+
+```typescript
+const calculator = variable<{
+  add(a: number, b: number): number;
+  multiply(x: number, y: number): number;
+}>();
+
+// 方法调用
+const sum = calculator.add(1, 2);
+const product = calculator.multiply(5, 3);
+
+// 链式方法调用
+const builder = variable<{
+  setName(name: string): typeof builder;
+  build(): { name: string };
+}>();
+const result = builder.setName("test").build();
+
+// 编译并执行
+const compiled = compile(sum, { calculator });
+const value = evaluate(compiled, {
+  calculator: {
+    add: (a, b) => a + b,
+    multiply: (x, y) => x * y,
+  },
+});
+// => 3
+```
+
+**数组方法：**
+
+数组变量支持所有标准数组方法，并自动处理类型推导：
+
+```typescript
+const numbers = variable<number[]>();
+const users = variable<{ id: number; name: string }[]>();
+
+// map
+const doubled = numbers.map((n) => expr({ n })("n * 2"));
+
+// filter
+const activeUsers = users.filter((u) => expr({ u })("u.active"));
+
+// reduce
+const sum = numbers.reduce(
+  lambda<[number, number], number>((acc, val) => expr({ acc, val })("acc + val")),
+  0
+);
+
+// find, some, every, sort 等
+const firstMatch = users.find((u) => expr({ u })("u.id === 1"));
+const hasAdmins = users.some((u) => expr({ u })("u.role === 'admin'"));
+const allActive = users.every((u) => expr({ u })("u.active"));
+const sorted = numbers.toSorted(lambda<[number, number], number>((a, b) => expr({ a, b })("a - b")));
+```
 
 ### 内置全局对象
 
@@ -234,6 +363,44 @@ const compiled = compile(sqrtExpr, { x });
 const result = evaluate(compiled, { x: 16 });
 // => 4
 ```
+
+### 支持的运算符和语法
+
+**算术运算符：**
+
+- `+`, `-`, `*`, `/`, `%`, `**` (幂运算)
+
+**比较运算符：**
+
+- `==`, `===`, `!=`, `!==`, `<`, `>`, `<=`, `>=`
+
+**逻辑运算符：**
+
+- `&&`, `||`, `!`, `??` (空值合并)
+
+**位运算符：**
+
+- `&`, `|`, `^`, `~`, `<<`, `>>`, `>>>`
+
+**其他运算符：**
+
+- `? :` (三元表达式)
+- `in` (属性存在检查)
+- `instanceof` (类型检查)
+- `typeof` (类型检测)
+- `?.` (可选链)
+- `?.()` (可选调用)
+- `?.[]` (可选元素访问)
+
+**语法特性：**
+
+- 对象字面量：`{ key: value, ... }`
+- 数组字面量：`[element1, element2, ...]`
+- 箭头函数：`(param) => expression`
+- 函数调用：`func(arg1, arg2, ...)`
+- 成员访问：`obj.prop`, `obj["prop"]`, `arr[0]`
+- 模板字面量（通过 `t` 标签函数）
+- 分组括号：`(expression)`
 
 ### 条件表达式
 
@@ -275,6 +442,75 @@ const result = evaluate(compiled, { a: 2, b: 3 });
 // => (2+3) * (2*3) - (2-3) = 5 * 6 - (-1) = 30 + 1 = 31
 ```
 
+### 短路求值（控制流优化）
+
+编译器支持为 `&&`、`||`、`??` 和三元表达式生成短路求值代码，避免不必要的计算：
+
+```typescript
+const a = variable<boolean>();
+const b = variable<boolean>();
+
+// 逻辑或短路
+const orExpr = expr({ a, b })("a || b");
+const compiled = compile(orExpr, { a, b }, { shortCircuit: true });
+
+// 当 a 为 true 时，b 不会被求值
+// 编译数据包含控制流节点：
+// [["a", "b"], ["br", "$0", 1], "$1", ["phi"]]
+
+// 空值合并
+const x = variable<number | null>();
+const y = variable<number>();
+const coalesce = expr({ x, y })("x ?? y");
+
+// 三元表达式
+const condition = variable<boolean>();
+const result = variable<number>();
+const alternative = variable<number>();
+const ternary = expr({ condition, result, alternative })("condition ? result : alternative");
+```
+
+### 自动内联优化
+
+编译器自动将只被引用一次的子表达式内联到使用位置，减少中间计算：
+
+```typescript
+const x = variable<number>();
+const y = variable<number>();
+
+const sum = expr({ x, y })("x + y");
+const product = expr({ x, y })("x * y");
+const result = expr({ sum, product })("sum + product");
+
+// 自动内联后，编译结果为：
+// [["x", "y"], "($0+$1)+($0*$1)"]
+// 而不是 [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+
+const compiled = compile(result, { x, y });
+const value = evaluate(compiled, { x: 2, y: 3 });
+// => 11
+```
+
+### 直接编译对象和数组
+
+`compile` 函数支持直接编译包含 Proxy 的对象和数组：
+
+```typescript
+const x = variable<number>();
+const y = variable<number>();
+const sum = expr({ x, y })("x + y");
+
+// 编译对象
+const objCompiled = compile({ result: sum, original: { x, y } }, { x, y });
+const objResult = evaluate(objCompiled, { x: 10, y: 20 });
+// => { result: 30, original: { x: 10, y: 20 } }
+
+// 编译数组
+const arrCompiled = compile([x, sum, 100], { x, y });
+const arrResult = evaluate(arrCompiled, { x: 5, y: 3 });
+// => [5, 8, 100]
+```
+
 ## 序列化和传输
 
 编译后的数据可以轻松进行 JSON 序列化，适合网络传输或持久化存储：
@@ -296,6 +532,89 @@ const deserialized = JSON.parse(json);
 const value = evaluate(deserialized, { x: 5, y: 3 });
 ```
 
+## 编译数据格式
+
+### V1 格式（基础表达式）
+
+基础格式为 JSON 数组：`[variableNames, ...expressions]`
+
+```typescript
+// 输入
+const sum = expr({ x, y })("x + y");
+const compiled = compile(sum, { x, y });
+
+// 输出
+// [["x", "y"], "$0+$1"]
+//  $0 引用 x，$1 引用 y
+```
+
+### V2 格式（控制流节点）
+
+启用短路求值时，生成包含控制流节点的格式：
+
+```typescript
+// 输入
+const result = expr({ a, b })("a || b");
+const compiled = compile(result, { a, b }, { shortCircuit: true });
+
+// 输出
+// [
+//   ["a", "b"],
+//   ["br", "$0", 1],  // 如果 $0 为 truthy，跳过 1 条指令
+//   "$1",             // 否则求值 $1
+//   ["phi"]           // 取最近求值结果
+// ]
+```
+
+**控制流节点类型：**
+
+- `["br", condition, offset]` - 条件跳转，条件为真时跳过 offset 条指令
+- `["jmp", offset]` - 无条件跳转，跳过 offset 条指令
+- `["phi"]` - 取最近求值结果（用于合并分支）
+
+## 错误处理
+
+### 编译时错误
+
+编译器会检测并报告以下错误：
+
+```typescript
+const x = variable<number>();
+const y = variable<number>();
+
+// 错误：引用未定义的变量
+const invalid = expr({ x, y })("x + y + z");
+compile(invalid, { x, y });
+// => Error: Undefined variable(s): z
+
+// 错误：变量名冲突
+const xy = variable<number>();
+const conflict = expr({ xy, x })("xy + x");
+// 正确处理：编译器能区分 xy 和 x
+const compiled = compile(conflict, { xy, x });
+// => [["xy", "x"], "$0+$1"]
+```
+
+### 运行时错误
+
+求值器会验证输入并报告运行时错误：
+
+```typescript
+const x = variable<number>();
+const y = variable<number>();
+
+const sum = expr({ x, y })("x + y");
+const compiled = compile(sum, { x, y });
+
+// 错误：缺少必需变量
+evaluate(compiled, { x: 2 });
+// => Error: Missing required variable: y
+
+// 错误：无效的编译数据
+evaluate([], { x: 1 });
+// => Error: Invalid compiled data: must have at least variable names
+```
+
 ## 类型安全
 
 项目充分利用 TypeScript 的类型系统进行编译时检查和类型推导：
@@ -309,28 +628,165 @@ const y = variable<string>();
 const valid = expr({ x })("-x"); // 编译器推导为 number
 ```
 
+## 实际应用示例
+
+### 动态表单验证规则
+
+```typescript
+const formData = variable<{
+  username: string;
+  password: string;
+  confirmPassword: string;
+  age: number;
+}>();
+
+// 创建验证规则表达式
+const isUsernameValid = expr({ formData })("formData.username.length >= 3 && formData.username.length <= 20");
+
+const isPasswordValid = expr({ formData })("formData.password.length >= 8 && /[A-Z]/.test(formData.password)");
+
+const doPasswordsMatch = expr({ formData })("formData.password === formData.confirmPassword");
+
+const isAgeValid = expr({ formData })("formData.age >= 18 && formData.age <= 120");
+
+const isFormValid = expr({
+  isUsernameValid,
+  isPasswordValid,
+  doPasswordsMatch,
+  isAgeValid,
+})("isUsernameValid && isPasswordValid && doPasswordsMatch && isAgeValid");
+
+// 编译一次，多次执行
+const compiled = compile(isFormValid, { formData });
+
+// 在表单输入时实时验证
+evaluate(compiled, {
+  formData: {
+    username: "john_doe",
+    password: "Secure123",
+    confirmPassword: "Secure123",
+    age: 25,
+  },
+}); // => true
+```
+
+### 数据转换管道
+
+```typescript
+const rawData = variable<any[]>();
+const config = variable<{
+  minValue: number;
+  maxValue: number;
+  transform: (x: number) => number;
+}>();
+
+// 构建数据处理管道
+const filtered = rawData.filter(
+  lambda<[any], boolean>((item) =>
+    expr({ item, config })("item.value >= config.minValue && item.value <= config.maxValue")
+  )
+);
+
+const transformed = filtered.map(
+  lambda<[any], number>((item) => expr({ item, config })("config.transform(item.value)"))
+);
+
+const sorted = transformed.toSorted(lambda<[number, number], number>((a, b) => expr({ a, b })("a - b")));
+
+const pipeline = compile(sorted, { rawData, config });
+
+// 执行数据处理
+const result = evaluate(pipeline, {
+  rawData: [{ value: 10 }, { value: 5 }, { value: 20 }, { value: 15 }],
+  config: { minValue: 8, maxValue: 18, transform: (x: number) => x * 2 },
+});
+// => [10, 20, 30] (5 被过滤，10*2=20, 15*2=30, 20 被过滤)
+```
+
+### 规则引擎
+
+```typescript
+// 定义规则条件
+const user = variable<{
+  age: number;
+  role: string;
+  balance: number;
+}>();
+
+const isEligible = expr({ user })(
+  "(user.age >= 18 && user.age <= 65) && (user.role === 'premium' || user.balance > 10000)"
+);
+
+const discountRate = expr({ user, isEligible })("isEligible ? (user.role === 'premium' ? 0.2 : 0.1) : 0");
+
+const rule = compile(discountRate, { user });
+
+// 应用规则
+const discount = evaluate(rule, {
+  user: { age: 30, role: "premium", balance: 5000 },
+});
+// => 0.2 (20% 折扣)
+```
+
 ## 性能考虑
 
 - **编译时间**：编译过程涉及依赖分析和拓扑排序，通常快速完成
 - **执行时间**：表达式通过 `new Function()` 编译为原生 JavaScript，执行性能接近原生代码
 - **内存占用**：编译数据为纯 JSON，占用空间小，适合在网络上传输
+- **缓存机制**：求值器缓存已编译的函数，重复执行时性能更优
+
+### 最佳实践
+
+1. **编译一次，多次执行**：对于重复使用的表达式，先编译后多次求值
+
+   ```typescript
+   const compiled = compile(expression, variables);
+   // 缓存 compiled，多次调用 evaluate
+   evaluate(compiled, values1);
+   evaluate(compiled, values2);
+   ```
+
+2. **合理使用短路求值**：对于条件表达式，启用短路求值可以避免不必要的计算
+
+   ```typescript
+   compile(expression, variables, { shortCircuit: true });
+   ```
+
+3. **利用自动内联**：编译器会自动内联只引用一次的子表达式，无需手动优化
+
+4. **优先使用 Proxy 链式调用**：对于对象属性访问，使用 `config.timeout` 比 `expr({ config })("config.timeout")` 更简洁且类型更安全
 
 ## 项目结构
 
 ```
 src/
-├── index.ts              # 导出入口
-├── variable.ts           # variable<T>() 函数
-├── expr.ts               # expr() 函数
-├── template.ts           # t() 标签模板函数
-├── compile.ts            # 编译器（内联优化、短路求值）
-├── evaluate.ts           # 运行时求值
-├── parser.ts             # 表达式 AST 解析器
-├── type-parser.ts        # TypeScript 类型级表达式解析
-├── proxy-variable.ts     # Proxy 变量实现
-├── proxy-metadata.ts     # Proxy 元数据管理
-├── types.ts              # 类型定义
-└── *.test.ts             # 测试文件
+├── index.ts                      # 导出入口
+├── variable.ts                   # variable<T>() 函数
+├── expr.ts                       # expr() 函数
+├── template.ts                   # t() 标签模板函数
+├── lambda.ts                     # lambda() 函数（数组方法支持）
+├── compile.ts                    # 编译器（内联优化、短路求值）
+├── evaluate.ts                   # 运行时求值
+├── parser.ts                     # 表达式 AST 解析器
+├── type-parser.ts                # TypeScript 类型级表达式解析
+├── proxy-variable.ts             # Proxy 变量实现
+├── proxy-metadata.ts             # Proxy 元数据管理
+├── types.ts                      # 类型定义（Variable、Expression、Lambda 等）
+├── compile.test.ts               # 编译器单元测试
+├── evaluate.test.ts              # 求值器单元测试
+├── parser.test.ts                # 解析器单元测试
+├── type-parser.test.ts           # 类型解析器单元测试
+├── proxy-variable.test.ts        # Proxy 变量单元测试
+├── lambda.test.ts                # Lambda 表达式测试
+├── integration.basic.test.ts     # 基础表达式集成测试
+├── integration.boolean.test.ts   # 布尔表达式测试
+├── integration.math.test.ts      # Math 函数测试
+├── integration.functions.test.ts # 函数调用测试
+├── integration.objects.test.ts   # 对象属性访问测试
+├── integration.objects-direct.test.ts # 直接编译对象/数组测试
+├── integration.short-circuit.test.ts  # 短路求值测试
+├── integration.optimization.test.ts   # 编译优化测试
+└── integration.complex.test.ts   # 复杂表达式组合测试
 ```
 
 ## 开发
