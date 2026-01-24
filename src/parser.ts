@@ -16,7 +16,8 @@ export type ASTNode =
   | MemberExpr
   | CallExpr
   | ArrayExpr
-  | ObjectExpr;
+  | ObjectExpr
+  | ArrowFunctionExpr;
 
 export interface NumberLiteral {
   type: "NumberLiteral";
@@ -95,6 +96,12 @@ export interface ObjectProperty {
   value: ASTNode;
   computed: boolean;
   shorthand: boolean;
+}
+
+export interface ArrowFunctionExpr {
+  type: "ArrowFunctionExpr";
+  params: Identifier[];
+  body: ASTNode;
 }
 
 // 运算符优先级（从低到高）
@@ -344,8 +351,11 @@ class Parser {
       return this.parseObject();
     }
 
-    // 括号表达式
+    // 括号表达式或箭头函数参数列表
     if (ch === "(") {
+      const arrowFunc = this.tryParseArrowFunction();
+      if (arrowFunc) return arrowFunc;
+
       this.advance();
       this.skipWhitespace();
       const expr = this.parseExpression();
@@ -368,8 +378,11 @@ class Parser {
       return { type: "Identifier", name: "undefined" };
     }
 
-    // 标识符
+    // 标识符（可能是单参数箭头函数）
     if (this.isIdentifierStart(ch)) {
+      const arrowFunc = this.tryParseSingleParamArrowFunction();
+      if (arrowFunc) return arrowFunc;
+
       return this.parseIdentifier();
     }
 
@@ -544,6 +557,92 @@ class Parser {
       throw new Error(`Expected identifier at position ${this.pos}`);
     }
     return { type: "Identifier", name };
+  }
+
+  /**
+   * 尝试解析带括号的箭头函数: (a, b) => expr
+   * 使用回溯机制
+   */
+  private tryParseArrowFunction(): ArrowFunctionExpr | null {
+    const savedPos = this.pos;
+
+    try {
+      this.expect("(");
+      this.skipWhitespace();
+
+      const params: Identifier[] = [];
+
+      // 解析参数列表
+      while (this.peek() !== ")") {
+        if (!this.isIdentifierStart(this.peek())) {
+          throw new Error("Expected identifier");
+        }
+        params.push(this.parseIdentifier());
+        this.skipWhitespace();
+        if (this.peek() === ",") {
+          this.advance();
+          this.skipWhitespace();
+        } else {
+          break;
+        }
+      }
+
+      this.expect(")");
+      this.skipWhitespace();
+
+      // 检查 =>
+      if (this.source.slice(this.pos, this.pos + 2) !== "=>") {
+        throw new Error("Expected =>");
+      }
+      this.pos += 2;
+      this.skipWhitespace();
+
+      // 解析函数体
+      const body = this.parseExpression();
+
+      return {
+        type: "ArrowFunctionExpr",
+        params,
+        body,
+      };
+    } catch {
+      // 回溯
+      this.pos = savedPos;
+      return null;
+    }
+  }
+
+  /**
+   * 尝试解析单参数无括号的箭头函数: a => expr
+   * 使用回溯机制
+   */
+  private tryParseSingleParamArrowFunction(): ArrowFunctionExpr | null {
+    const savedPos = this.pos;
+
+    try {
+      const param = this.parseIdentifier();
+      this.skipWhitespace();
+
+      // 检查 =>
+      if (this.source.slice(this.pos, this.pos + 2) !== "=>") {
+        throw new Error("Expected =>");
+      }
+      this.pos += 2;
+      this.skipWhitespace();
+
+      // 解析函数体
+      const body = this.parseExpression();
+
+      return {
+        type: "ArrowFunctionExpr",
+        params: [param],
+        body,
+      };
+    } catch {
+      // 回溯
+      this.pos = savedPos;
+      return null;
+    }
   }
 
   private parseArguments(): ASTNode[] {
@@ -761,6 +860,19 @@ export function generate(node: ASTNode): string {
       return `{${props.join(",")}}`;
     }
 
+    case "ArrowFunctionExpr": {
+      const params = node.params.map((p) => p.name).join(",");
+      let body = generate(node.body);
+      // 如果 body 是对象字面量，需要用括号包裹，否则会被解释为代码块
+      if (node.body.type === "ObjectExpr") {
+        body = `(${body})`;
+      }
+      if (node.params.length === 1) {
+        return `${params}=>${body}`;
+      }
+      return `(${params})=>${body}`;
+    }
+
     default: {
       const unknownNode = node as { type?: string };
       const nodeType = unknownNode.type ?? "unknown";
@@ -893,6 +1005,15 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
         })),
       };
 
+    case "ArrowFunctionExpr": {
+      // 箭头函数：参数名不转换，只转换函数体中的非参数标识符
+      const paramNames = new Set(node.params.map((p) => p.name));
+      return {
+        ...node,
+        body: transformIdentifiers(node.body, (name) => (paramNames.has(name) ? name : transform(name))),
+      };
+    }
+
     default:
       return node;
   }
@@ -949,6 +1070,19 @@ export function collectIdentifiers(node: ASTNode): Set<string> {
           visit(prop.value);
         });
         break;
+
+      case "ArrowFunctionExpr": {
+        // 箭头函数：收集参数名和函数体中的标识符
+        // 但从闭包角度，只需收集非参数的自由变量
+        const paramNames = new Set(n.params.map((p) => p.name));
+        const bodyIdentifiers = collectIdentifiers(n.body);
+        for (const id of bodyIdentifiers) {
+          if (!paramNames.has(id)) {
+            identifiers.add(id);
+          }
+        }
+        break;
+      }
     }
   }
 

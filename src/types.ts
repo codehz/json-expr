@@ -141,3 +141,47 @@ export type InferContextType<C> = {
  * @template E - Expression 类型
  */
 export type InferExpressionType<E> = E extends Expression<unknown, infer R> ? R : never;
+
+// ============================================================================
+// Lambda 类型系统
+// ============================================================================
+
+/**
+ * Lambda 参数代理类型
+ * 与普通 Proxify<T> 相同，但标记为 lambda 参数
+ */
+export type LambdaParam<T> = Proxify<T>;
+
+/**
+ * Lambda 构建函数签名
+ * @template Args - 参数类型元组
+ * @template R - 返回值类型
+ */
+export type LambdaBuilder<Args extends unknown[], R> = (
+  ...params: { [K in keyof Args]: LambdaParam<Args[K]> }
+) => Proxify<R>;
+
+/**
+ * Lambda 表达式类型
+ * 表示一个可序列化的函数
+ */
+export type Lambda<Args extends unknown[], R> = Proxify<(...args: Args) => R>;
+
+/**
+ * 从 Lambda 类型提取参数类型
+ */
+export type InferLambdaArgs<L> = L extends Lambda<infer Args, unknown> ? Args : never;
+
+/**
+ * 从 Lambda 类型提取返回类型
+ */
+export type InferLambdaReturn<L> = L extends Lambda<unknown[], infer R> ? R : never;
+
+/**
+ * 常用 Lambda 类型别名
+ */
+export type MapCallback<T, R> = Lambda<[T, number, T[]], R>;
+export type FilterCallback<T> = Lambda<[T, number, T[]], boolean>;
+export type ReduceCallback<T, R> = Lambda<[R, T, number, T[]], R>;
+export type FindCallback<T> = Lambda<[T, number, T[]], boolean>;
+export type SortCallback<T> = Lambda<[T, T], number>;

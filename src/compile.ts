@@ -286,6 +286,19 @@ function transformIdentifiers(node: ASTNode, getReplacementAst: (name: string) =
         })),
       };
 
+    case "ArrowFunctionExpr": {
+      // 箭头函数：参数名不替换，只替换函数体中的非参数标识符
+      const paramNames = new Set(node.params.map((p) => p.name));
+      return {
+        ...node,
+        body: transformIdentifiers(node.body, (name) => {
+          // 如果是参数名，不替换
+          if (paramNames.has(name)) return null;
+          return getReplacementAst(name);
+        }),
+      };
+    }
+
     default:
       return node;
   }

@@ -1,3 +1,4 @@
+import { generate, parse, transformIdentifiers } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 import { createProxyExpressionWithSource } from "./proxy-variable";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
@@ -44,8 +45,18 @@ export function expr<TContext extends Record<string, unknown>>(
     const nameToId = new Map<string, symbol>();
 
     for (const [name, value] of Object.entries(context)) {
-      // 检查是否是 Proxy variable
-      const id = getVariableId(value);
+      // 检查是否是 Proxy variable（包括通过 variable() 创建的和 lambda 参数）
+      let id = getVariableId(value);
+
+      // 如果 getVariableId 返回 undefined，尝试从 ProxyMetadata 获取 rootVariable
+      // 这用于支持 lambda 参数（它们没有注册到 variableIds 中）
+      if (!id && (typeof value === "object" || typeof value === "function") && value !== null) {
+        const meta = getProxyMetadata(value);
+        if (meta?.type === "variable" && meta.rootVariable) {
+          id = meta.rootVariable;
+        }
+      }
+
       if (id) {
         deps.add(id);
         nameToId.set(name, id);
@@ -63,31 +74,41 @@ export function expr<TContext extends Record<string, unknown>>(
       }
     }
 
-    // 将源码中的变量名替换为占位符
-    let transformedSource = source as string;
-    for (const [name, id] of nameToId) {
-      // 使用正则替换，确保是完整的标识符
-      const placeholder = getVariablePlaceholder(id);
-      // 注意：在 replace 的替换字符串中，$$ 会被解释为字面量 $
-      // 所以需要将 $ 替换为 $$
-      const escapedPlaceholder = placeholder.replace(/\$/g, "$$$$");
-      const regex = new RegExp(`\\b${name}\\b`, "g");
-      transformedSource = transformedSource.replace(regex, escapedPlaceholder);
-    }
-
-    // 处理 context 中的 Proxy expression（它们的 source 已包含占位符）
+    // 建立变量名到表达式源码的映射（用于 Proxy expression）
+    const nameToExprSource = new Map<string, string>();
     for (const [name, value] of Object.entries(context)) {
       // 注意：Proxy 包装函数，typeof 返回 'function'
-      if ((typeof value === "object" || typeof value === "function") && value !== null && !getVariableId(value)) {
+      if ((typeof value === "object" || typeof value === "function") && value !== null) {
+        // 跳过已经在 nameToId 中的变量
+        if (nameToId.has(name)) continue;
+
         const meta = getProxyMetadata(value);
         if (meta?.source) {
-          const regex = new RegExp(`\\b${name}\\b`, "g");
-          // 转义 $ 以避免被解释为替换模式
-          const escapedSource = `(${meta.source})`.replace(/\$/g, "$$$$");
-          transformedSource = transformedSource.replace(regex, escapedSource);
+          nameToExprSource.set(name, meta.source);
         }
       }
     }
+
+    // 使用 AST 转换而不是字符串替换，以正确处理对象属性名等情况
+    const ast = parse(source as string);
+    const transformedAst = transformIdentifiers(ast, (name) => {
+      // 检查是否是 context 中的变量
+      const id = nameToId.get(name);
+      if (id) {
+        return getVariablePlaceholder(id);
+      }
+
+      // 检查是否是 context 中的表达式
+      const exprSource = nameToExprSource.get(name);
+      if (exprSource) {
+        return `(${exprSource})`;
+      }
+
+      // 保持原样
+      return name;
+    });
+
+    const transformedSource = generate(transformedAst);
 
     return createProxyExpressionWithSource<InferExpressionResult<TSource, TContext>>(transformedSource, deps);
   };

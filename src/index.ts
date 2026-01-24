@@ -2,6 +2,7 @@
 export { compile, type CompileOptions } from "./compile";
 export { evaluate } from "./evaluate";
 export { expr } from "./expr";
+export { lambda } from "./lambda";
 export { isProxy, isProxyExpression, isProxyVariable } from "./proxy-metadata";
 export { t } from "./template";
 export { getVariableId, variable } from "./variable";
@@ -15,13 +16,23 @@ export type {
   ControlFlowNode,
   ExprNode,
   Expression,
+  FilterCallback,
+  FindCallback,
   InferContextType,
   InferExpressionType,
+  InferLambdaArgs,
+  InferLambdaReturn,
   InferVariableType,
   JumpNode,
+  Lambda,
+  LambdaBuilder,
+  LambdaParam,
+  MapCallback,
   PhiNode,
   Proxify,
   ProxyExpression,
+  ReduceCallback,
+  SortCallback,
   Variable,
 } from "./types";
 
