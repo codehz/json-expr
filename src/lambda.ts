@@ -43,7 +43,7 @@ function createLambdaParam<T>(index: number): Proxify<T> {
   const proxy = createProxyVariable<T>(id);
 
   // 记录参数索引
-  lambdaParamIndices.set(proxy as object, index);
+  lambdaParamIndices.set(proxy, index);
 
   return proxy;
 }
@@ -67,8 +67,44 @@ function createLambdaParam<T>(index: number): Proxify<T> {
  * ```
  */
 export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R>): Lambda<Args, R> {
-  // 1. 根据 builder 函数的参数数量创建参数代理
+  // 1. 创建参数代理和符号映射
   const paramCount = builder.length;
+  const { params, paramSymbols } = createLambdaParams(paramCount);
+
+  // 2. 调用 builder 获取函数体表达式
+  const bodyExpr = builder(...(params as Parameters<LambdaBuilder<Args, R>>));
+
+  // 3. 从 bodyExpr 中提取 AST 和依赖
+  const { bodyAst, bodyDeps } = extractBodyAstAndDeps(bodyExpr);
+
+  // 4. 将参数占位符标识符转换为实际参数名 (_0, _1, _2...)
+  const transformedBodyAst = transformParamPlaceholders(bodyAst, paramSymbols);
+
+  // 5. 构造完整的箭头函数 AST
+  const arrowFunctionAst = createArrowFunctionAst(transformedBodyAst, paramCount);
+
+  // 6. 过滤掉 lambda 参数依赖，只保留外部闭包变量
+  const closureDeps = filterClosureDeps(bodyDeps, paramSymbols);
+
+  // 7. 返回包含 lambda AST 的 Proxy
+  const lambdaProxy = createProxyExpressionWithAST<(...args: Args) => R>(arrowFunctionAst, closureDeps);
+
+  // 8. 设置额外的 lambda 元数据（标记为 lambda 类型）
+  const existingMeta = getProxyMetadata(lambdaProxy);
+  if (existingMeta) {
+    setProxyMetadata(lambdaProxy, {
+      ...existingMeta,
+      type: "expression", // 保持为 expression，但 AST 包含箭头函数
+    });
+  }
+
+  return lambdaProxy as Lambda<Args, R>;
+}
+
+/**
+ * 创建 lambda 参数和符号映射
+ */
+function createLambdaParams(paramCount: number) {
   const params: Proxify<unknown>[] = [];
   const paramSymbols: symbol[] = [];
 
@@ -77,39 +113,47 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
     params.push(param);
 
     // 获取参数的 Symbol ID
-    const meta = getProxyMetadata(param as object);
+    const meta = getProxyMetadata(param);
     if (meta?.rootVariable) {
       paramSymbols.push(meta.rootVariable);
     }
   }
 
-  // 2. 调用 builder 获取函数体表达式
-  const bodyExpr = builder(...(params as Parameters<LambdaBuilder<Args, R>>));
+  return { params, paramSymbols };
+}
 
-  // 3. 从 bodyExpr 中提取 AST 和依赖
-  //    支持返回 Proxy 表达式、普通对象/数组、或原始值
-  let bodyAst: ASTNode;
-  let bodyDeps: Set<symbol>;
-
+/**
+ * 从表达式中提取 AST 和依赖
+ */
+function extractBodyAstAndDeps(bodyExpr: unknown): { bodyAst: ASTNode; bodyDeps: Set<symbol> } {
   const meta =
     (typeof bodyExpr === "object" || typeof bodyExpr === "function") && bodyExpr !== null
-      ? getProxyMetadata(bodyExpr as object)
+      ? getProxyMetadata(bodyExpr)
       : undefined;
 
   if (meta?.ast) {
     // Proxy 表达式：使用其 AST 和依赖
-    bodyAst = meta.ast;
-    bodyDeps = meta.dependencies ?? new Set<symbol>();
+    return {
+      bodyAst: meta.ast,
+      bodyDeps: meta.dependencies ?? new Set<symbol>(),
+    };
   } else {
     // 普通对象、数组或原始值：使用 serializeArgumentToAST 转换
     // 并收集其中可能包含的 Proxy 变量依赖
-    bodyAst = serializeArgumentToAST(bodyExpr);
-    bodyDeps = new Set<symbol>();
+    const bodyDeps = new Set<symbol>();
     collectDepsFromArgs([bodyExpr], bodyDeps);
+    return {
+      bodyAst: serializeArgumentToAST(bodyExpr),
+      bodyDeps,
+    };
   }
+}
 
-  // 4. 将参数占位符标识符转换为实际参数名 (_0, _1, _2...)
-  const transformedBodyAst = transformIdentifiers(bodyAst, (name) => {
+/**
+ * 将参数占位符标识符转换为实际参数名
+ */
+function transformParamPlaceholders(bodyAst: ASTNode, paramSymbols: symbol[]): ASTNode {
+  return transformIdentifiers(bodyAst, (name) => {
     for (let i = 0; i < paramSymbols.length; i++) {
       const sym = paramSymbols[i];
       if (!sym) continue;
@@ -121,34 +165,33 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
     }
     return name;
   });
+}
 
-  // 5. 构造完整的箭头函数 AST
-  const paramIdentifiers = params.map((_, i) => ({ type: "Identifier" as const, name: `_${i}` }));
-  const arrowFunctionAst: ASTNode = {
+/**
+ * 创建箭头函数 AST
+ */
+function createArrowFunctionAst(bodyAst: ASTNode, paramCount: number): ASTNode {
+  const paramIdentifiers = Array.from({ length: paramCount }, (_, i) => ({
+    type: "Identifier" as const,
+    name: `_${i}`,
+  }));
+
+  return {
     type: "ArrowFunctionExpr",
     params: paramIdentifiers,
-    body: transformedBodyAst,
+    body: bodyAst,
   };
+}
 
-  // 6. 过滤掉 lambda 参数依赖，只保留外部闭包变量
+/**
+ * 过滤掉 lambda 参数依赖，只保留外部闭包变量
+ */
+function filterClosureDeps(bodyDeps: Set<symbol>, paramSymbols: symbol[]): Set<symbol> {
   const closureDeps = new Set<symbol>();
   for (const dep of bodyDeps) {
     if (!paramSymbols.includes(dep)) {
       closureDeps.add(dep);
     }
   }
-
-  // 7. 返回包含 lambda AST 的 Proxy
-  const lambdaProxy = createProxyExpressionWithAST<(...args: Args) => R>(arrowFunctionAst, closureDeps);
-
-  // 8. 设置额外的 lambda 元数据（标记为 lambda 类型）
-  const existingMeta = getProxyMetadata(lambdaProxy as object);
-  if (existingMeta) {
-    setProxyMetadata(lambdaProxy as object, {
-      ...existingMeta,
-      type: "expression", // 保持为 expression，但 AST 包含箭头函数
-    });
-  }
-
-  return lambdaProxy as Lambda<Args, R>;
+  return closureDeps;
 }
