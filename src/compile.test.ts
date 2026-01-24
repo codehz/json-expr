@@ -51,19 +51,16 @@ describe("compile 单元测试", () => {
   });
 
   describe("错误检测", () => {
-    test("未定义的变量保留在表达式中", () => {
+    test("未定义的变量抛出错误", () => {
       const x = variable<number>();
       const y = variable<number>();
 
-      // 新 Proxy 系统中，未定义的变量 z 会保留在表达式中
-      // 类型检查会在编译时捕获这类错误
-      // 绕过类型检查时，z 会作为全局变量处理
+      // 未定义的变量 z 会导致编译时抛出错误
       const sum = expr({ x, y })("x + y + z");
-      const compiled = compile(sum as unknown as import("./types").ProxyExpression<number>, { x, y });
 
-      // z 保留在表达式中，不会被替换
-      expect(typeof compiled[1]).toBe("string");
-      expect((compiled[1] as string).includes("z")).toBe(true);
+      expect(() => {
+        compile(sum as unknown as import("./types").ProxyExpression<number>, { x, y });
+      }).toThrow("Undefined variable(s): z");
     });
   });
 

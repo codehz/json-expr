@@ -29,19 +29,17 @@ describe("集成测试：基础表达式", () => {
       expect(evaluate<number>(compiled, { x: 5 })).toBe(9); // ((5+1)*2)-3
     });
 
-    test("引用不存在的变量保留在表达式中", () => {
+    test("引用不存在的变量抛出错误", () => {
       const x = variable<number>();
 
       const expr1 = expr({ x })("x + 1");
       const expr2 = expr({ expr1 })("expr1 * 2");
       // 错误：引用 expr3 而不是 expr2
-      // 新 Proxy 系统中，未定义的引用会保留在表达式中
+      // 新实现会检测未定义变量并抛出错误
       const expr3 = expr({ expr2 })("expr3 - 3");
 
-      // expr3 保留在表达式中，不会被替换
-      const compiled = compile(expr3, { x });
-      expect(compiled[0]).toEqual(["x"]);
-      expect((compiled[1] as string).includes("expr3")).toBe(true);
+      // 编译时应该抛出未定义变量错误
+      expect(() => compile(expr3, { x })).toThrow("Undefined variable(s): expr3");
     });
   });
 

@@ -3,6 +3,25 @@ import { getProxyMetadata } from "./proxy-metadata";
 import type { BranchNode, CompiledData, CompiledExpression, JumpNode, PhiNode, ProxyExpression } from "./types";
 import { getVariableId } from "./variable";
 
+const ALLOWED_GLOBALS = new Set([
+  "Math",
+  "JSON",
+  "Date",
+  "RegExp",
+  "Number",
+  "String",
+  "Boolean",
+  "Array",
+  "Object",
+  "undefined",
+  "NaN",
+  "Infinity",
+  "isNaN",
+  "isFinite",
+  "parseInt",
+  "parseFloat",
+]);
+
 /**
  * 编译选项
  */
@@ -95,14 +114,22 @@ export function compile<TResult>(
   const ast = parse(source);
 
   // 转换 AST：将变量引用替换为 $N
+  const undefinedVars: string[] = [];
   const transformed = transformIdentifiers(ast, (name) => {
     const index = variableToIndex.get(name);
     if (index !== undefined) {
       return { type: "Identifier", name: `$${index}` } as ASTNode;
     }
-    // 不是变量，保持原样（可能是全局对象如 Math）
+    // 检查是否为允许的全局对象
+    if (!ALLOWED_GLOBALS.has(name)) {
+      undefinedVars.push(name);
+    }
     return null;
   });
+
+  if (undefinedVars.length > 0) {
+    throw new Error(`Undefined variable(s): ${[...new Set(undefinedVars)].join(", ")}`);
+  }
 
   // 生成编译后的表达式
   const expressions: CompiledExpression[] = [];
