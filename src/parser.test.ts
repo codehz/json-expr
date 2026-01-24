@@ -138,6 +138,24 @@ describe("parser 单元测试", () => {
     test("用于明确语义的括号", () => {
       // 条件表达式在二元表达式中需要括号
       expect(generate(parse("(a ? b : c) + d"))).toBe("(a?b:c)+d");
+      expect(generate(parse("a + (b ? c : d)"))).toBe("a+(b?c:d)");
+    });
+
+    test("生成代码时的括号处理", () => {
+      // MemberExpr 对象需要括号的情况
+      expect(generate(parse("(a + b).c"))).toBe("(a+b).c");
+      expect(generate(parse("(a ? b : c).d"))).toBe("(a?b:c).d");
+      expect(generate(parse("(-a).b"))).toBe("(-a).b");
+      expect(generate(parse("({a: 1}).a"))).toBe("({a:1}).a");
+      expect(generate(parse("(42).toString()"))).toBe("(42).toString()");
+
+      // CallExpr callee 需要括号的情况
+      expect(generate(parse("(a + b)()"))).toBe("(a+b)()");
+      expect(generate(parse("(a ? b : c)()"))).toBe("(a?b:c)()");
+      expect(generate(parse("(() => a)()"))).toBe("(()=>a)()");
+
+      // ConditionalExpr test 需要括号的情况
+      expect(generate(parse("(a ? b : c) ? d : e"))).toBe("(a?b:c)?d:e");
     });
 
     test("复杂表达式", () => {

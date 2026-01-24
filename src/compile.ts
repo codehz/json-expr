@@ -101,21 +101,16 @@ export function compile<TResult>(
   // 转换 AST：将占位符替换为变量名，然后替换为 $N
   const undefinedVars: string[] = [];
   const transformed = transformIdentifiers(ast, (name) => {
-    // 占位符替换为变量名
     const placeholderMatch = name.match(/^\$\$VAR_(.+)\$\$$/);
-    if (placeholderMatch) {
-      const varName = descToName.get(placeholderMatch[1]!);
-      if (!varName) throw new Error(`Unknown variable placeholder: ${name}`);
-      name = varName;
-    }
+    const resolvedName = placeholderMatch ? descToName.get(placeholderMatch[1]!) : name;
 
-    // 变量名替换为 $N
-    const index = variableToIndex.get(name);
+    if (placeholderMatch && !resolvedName) throw new Error(`Unknown variable placeholder: ${name}`);
+
+    const index = variableToIndex.get(resolvedName!);
     if (index !== undefined) return `$${index}`;
 
-    // 检查是否为允许的全局对象
-    if (!ALLOWED_GLOBALS.has(name)) undefinedVars.push(name);
-    return name;
+    if (!ALLOWED_GLOBALS.has(resolvedName!)) undefinedVars.push(resolvedName!);
+    return resolvedName!;
   });
 
   if (undefinedVars.length > 0) {

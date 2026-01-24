@@ -136,6 +136,29 @@ const PRECEDENCE: Record<string, number> = {
 // 右结合运算符
 const RIGHT_ASSOCIATIVE = new Set(["**"]);
 
+// 内置构造函数列表
+const BUILTIN_CONSTRUCTORS = new Set([
+  "Date",
+  "RegExp",
+  "URL",
+  "URLSearchParams",
+  "Map",
+  "Set",
+  "Int8Array",
+  "Uint8Array",
+  "Uint8ClampedArray",
+  "Int16Array",
+  "Uint16Array",
+  "Int32Array",
+  "Uint32Array",
+  "Float32Array",
+  "Float64Array",
+  "BigInt64Array",
+  "BigUint64Array",
+  "ArrayBuffer",
+  "DataView",
+]);
+
 class Parser {
   private pos = 0;
   private source: string;
@@ -824,53 +847,25 @@ export function generate(node: ASTNode): string {
       return generate(node.argument) + node.operator;
 
     case "ConditionalExpr": {
-      const test = generate(node.test);
-      const consequent = generate(node.consequent);
-      const alternate = generate(node.alternate);
+      const test = wrapIfNeeded(node.test, node, "test");
+      const consequent = wrapIfNeeded(node.consequent, node, "consequent");
+      const alternate = wrapIfNeeded(node.alternate, node, "alternate");
       return `${test}?${consequent}:${alternate}`;
     }
 
     case "MemberExpr": {
       const object = wrapIfNeeded(node.object, node, "object");
-      if (node.computed) {
-        const property = generate(node.property);
-        return node.optional ? `${object}?.[${property}]` : `${object}[${property}]`;
-      }
       const property = generate(node.property);
-      return node.optional ? `${object}?.${property}` : `${object}.${property}`;
+      return node.computed
+        ? `${object}${node.optional ? "?." : ""}[${property}]`
+        : `${object}${node.optional ? "?." : "."}${property}`;
     }
 
     case "CallExpr": {
       const callee = wrapIfNeeded(node.callee, node, "callee");
       const args = node.arguments.map(generate).join(",");
-      // 检测是否需要使用 new 关键字（构造函数）
-      const needsNew =
-        node.callee.type === "Identifier" &&
-        [
-          "Date",
-          "RegExp",
-          "URL",
-          "URLSearchParams",
-          "Map",
-          "Set",
-          "Int8Array",
-          "Uint8Array",
-          "Uint8ClampedArray",
-          "Int16Array",
-          "Uint16Array",
-          "Int32Array",
-          "Uint32Array",
-          "Float32Array",
-          "Float64Array",
-          "BigInt64Array",
-          "BigUint64Array",
-          "ArrayBuffer",
-          "DataView",
-        ].includes(node.callee.name);
-      if (needsNew) {
-        return node.optional ? `new ${callee}?.(${args})` : `new ${callee}(${args})`;
-      }
-      return node.optional ? `${callee}?.(${args})` : `${callee}(${args})`;
+      const isNew = node.callee.type === "Identifier" && BUILTIN_CONSTRUCTORS.has(node.callee.name);
+      return `${isNew ? "new " : ""}${callee}${node.optional ? "?." : ""}(${args})`;
     }
 
     case "ArrayExpr":
@@ -889,15 +884,9 @@ export function generate(node: ASTNode): string {
 
     case "ArrowFunctionExpr": {
       const params = node.params.map((p) => p.name).join(",");
-      let body = generate(node.body);
-      // 如果 body 是对象字面量，需要用括号包裹，否则会被解释为代码块
-      if (node.body.type === "ObjectExpr") {
-        body = `(${body})`;
-      }
-      if (node.params.length === 1) {
-        return `${params}=>${body}`;
-      }
-      return `(${params})=>${body}`;
+      const body = node.body.type === "ObjectExpr" ? `(${generate(node.body)})` : generate(node.body);
+      const paramsStr = node.params.length === 1 ? params : `(${params})`;
+      return `${paramsStr}=>${body}`;
     }
 
     default: {
@@ -914,7 +903,7 @@ export function generate(node: ASTNode): string {
 function wrapIfNeeded(
   child: ASTNode,
   parent: ASTNode,
-  position: "left" | "right" | "argument" | "object" | "callee"
+  position: "left" | "right" | "argument" | "object" | "callee" | "test" | "consequent" | "alternate"
 ): string {
   const code = generate(child);
 
@@ -928,48 +917,40 @@ function wrapIfNeeded(
  * 判断子节点是否需要括号
  */
 function needsParens(child: ASTNode, parent: ASTNode, position: string): boolean {
-  // 条件表达式在二元表达式中需要括号
-  if (child.type === "ConditionalExpr" && parent.type === "BinaryExpr") {
-    return true;
-  }
-
-  // 二元表达式嵌套时根据优先级判断
-  if (child.type === "BinaryExpr" && parent.type === "BinaryExpr") {
-    const childPrec = PRECEDENCE[child.operator] || 0;
-    const parentPrec = PRECEDENCE[parent.operator] || 0;
-
-    if (childPrec < parentPrec) {
-      return true;
+  switch (parent.type) {
+    case "BinaryExpr": {
+      if (child.type === "ConditionalExpr" || child.type === "UnaryExpr") return true;
+      if (child.type === "BinaryExpr") {
+        const childPrec = PRECEDENCE[child.operator] ?? 0;
+        const parentPrec = PRECEDENCE[parent.operator] ?? 0;
+        if (childPrec < parentPrec) return true;
+        if (childPrec === parentPrec && position === "right" && !RIGHT_ASSOCIATIVE.has(parent.operator)) return true;
+      }
+      return false;
     }
 
-    // 相同优先级时，右侧需要括号（除了右结合运算符）
-    if (childPrec === parentPrec && position === "right") {
-      if (!RIGHT_ASSOCIATIVE.has(parent.operator)) {
+    case "UnaryExpr":
+      return position === "argument" && (child.type === "BinaryExpr" || child.type === "ConditionalExpr");
+
+    case "MemberExpr":
+    case "CallExpr": {
+      if (position !== "object" && position !== "callee") return false;
+      if (["BinaryExpr", "ConditionalExpr", "UnaryExpr", "ArrowFunctionExpr", "ObjectExpr"].includes(child.type)) {
         return true;
       }
+      // 处理 (42).toString() 这种整数紧跟点号的情况
+      if (child.type === "NumberLiteral" && parent.type === "MemberExpr" && !parent.computed) {
+        return !child.raw.includes(".") && !child.raw.includes("e") && !child.raw.includes("x");
+      }
+      return false;
     }
-  }
 
-  // 二元表达式或条件表达式作为一元表达式的参数时需要括号
-  if (
-    (child.type === "BinaryExpr" || child.type === "ConditionalExpr") &&
-    parent.type === "UnaryExpr" &&
-    position === "argument"
-  ) {
-    return true;
-  }
+    case "ConditionalExpr":
+      return position === "test" && child.type === "ConditionalExpr";
 
-  // 一元表达式作为二元表达式的操作数时需要括号（为了保持原有的语义清晰）
-  if (child.type === "UnaryExpr" && parent.type === "BinaryExpr") {
-    // ** 运算符左侧不能有一元表达式
-    if (parent.operator === "**" && position === "left") {
-      return true;
-    }
-    // 逻辑运算符、位运算符等需要明确一元表达式的边界
-    return true;
+    default:
+      return false;
   }
-
-  return false;
 }
 
 /**

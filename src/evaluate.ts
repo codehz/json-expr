@@ -93,29 +93,16 @@ export function evaluate<TResult = unknown>(data: CompiledData, values: Record<s
  * ```
  */
 function buildEvaluatorFunctionBody(expressions: string[], variableCount: number): string {
-  if (expressions.length === 0) {
-    throw new Error("No expressions to evaluate");
-  }
+  if (expressions.length === 0) throw new Error("No expressions to evaluate");
 
-  const lines: string[] = [];
-
-  // 为了使 $0, $1 等能在函数体中访问，我们需要创建局部变量
-  // 或者使用代理访问值数组
-  for (let i = 0; i < variableCount; i++) {
-    lines.push(`const $${i} = $values[${i}];`);
-  }
-
-  // 依次对每个表达式求值，结果追加到值数组
-  for (let i = 0; i < expressions.length; i++) {
-    const exprSource = expressions[i];
-    const resultIndex = variableCount + i;
-
-    lines.push(`const $${resultIndex} = ${exprSource};`);
-    lines.push(`$values[${resultIndex}] = $${resultIndex};`);
-  }
-
-  // 返回最后一个表达式的结果（即最后一个元素）
-  lines.push(`return $values[$values.length - 1];`);
+  const lines = [
+    ...Array.from({ length: variableCount }, (_, i) => `const $${i} = $values[${i}];`),
+    ...expressions.map((expr, i) => {
+      const idx = variableCount + i;
+      return `const $${idx} = ${expr}; $values[${idx}] = $${idx};`;
+    }),
+    `return $values[$values.length - 1];`,
+  ];
 
   return lines.join("\n");
 }
@@ -128,63 +115,45 @@ function buildEvaluatorFunctionBody(expressions: string[], variableCount: number
  * @returns 函数体字符串
  */
 function buildEvaluatorFunctionBodyV2(expressions: CompiledExpression[], variableCount: number): string {
-  if (expressions.length === 0) {
-    throw new Error("No expressions to evaluate");
-  }
+  if (expressions.length === 0) throw new Error("No expressions to evaluate");
 
-  const lines: string[] = [];
+  const lines = [
+    // 初始化变量
+    ...Array.from({ length: variableCount }, (_, i) => `const $${i} = $values[${i}];`),
+    "let $pc = 0;",
+    "let $lastValue;",
+    // 预先声明所有中间变量
+    ...expressions.map((_, i) => `let $${variableCount + i};`),
+    `while ($pc < ${expressions.length}) {`,
+    "  switch ($pc) {",
+  ];
 
-  // 初始化变量
-  for (let i = 0; i < variableCount; i++) {
-    lines.push(`const $${i} = $values[${i}];`);
-  }
-
-  // 程序计数器和最近值寄存器
-  lines.push(`let $pc = 0;`);
-  lines.push(`let $lastValue;`);
-
-  // 预先声明所有中间变量
-  for (let i = 0; i < expressions.length; i++) {
-    lines.push(`let $${variableCount + i};`);
-  }
-
-  lines.push(`while ($pc < ${expressions.length}) {`);
-  lines.push(`  switch ($pc) {`);
-
-  for (let i = 0; i < expressions.length; i++) {
-    const expr = expressions[i]!;
+  expressions.forEach((expr, i) => {
     const idx = variableCount + i;
-
     lines.push(`    case ${i}: {`);
 
     if (typeof expr === "string") {
-      // 普通表达式：求值并存储
-      lines.push(`      $${idx} = ${expr};`);
+      lines.push(`      $${idx} = $lastValue = ${expr};`);
       lines.push(`      $values[${idx}] = $${idx};`);
-      lines.push(`      $lastValue = $${idx};`);
-      lines.push(`      $pc++; break;`);
-    } else if (expr[0] === "br") {
-      // 条件跳转：条件为任意表达式
-      const [, condExpr, offset] = expr;
-      lines.push(`      if (${condExpr}) { $pc += ${offset + 1}; } else { $pc++; }`);
-      lines.push(`      break;`);
-    } else if (expr[0] === "jmp") {
-      // 无条件跳转
-      const [, offset] = expr;
-      lines.push(`      $pc += ${offset + 1}; break;`);
-    } else if (expr[0] === "phi") {
-      // phi 节点：取最近值
-      lines.push(`      $${idx} = $lastValue;`);
-      lines.push(`      $values[${idx}] = $lastValue;`);
-      lines.push(`      $pc++; break;`);
+      lines.push("      $pc++; break;");
+    } else {
+      const [type] = expr;
+      switch (type) {
+        case "br":
+          lines.push(`      if (${expr[1]}) { $pc += ${expr[2] + 1}; } else { $pc++; } break;`);
+          break;
+        case "jmp":
+          lines.push(`      $pc += ${expr[1] + 1}; break;`);
+          break;
+        case "phi":
+          lines.push(`      $${idx} = $values[${idx}] = $lastValue; $pc++; break;`);
+          break;
+      }
     }
+    lines.push("    }");
+  });
 
-    lines.push(`    }`);
-  }
-
-  lines.push(`  }`);
-  lines.push(`}`);
-  lines.push(`return $values[$values.length - 1];`);
+  lines.push("  }", "}", "return $values[$values.length - 1];");
 
   return lines.join("\n");
 }
