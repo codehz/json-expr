@@ -1,17 +1,14 @@
 import { expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 test("集成测试：基础对象属性访问", () => {
   // 测试创建包含 name(string)、value(number)、enabled(boolean) 的对象变量
   // 并测试访问各个属性的表达式
-  const obj = variable(
-    z.object({
-      name: z.string(),
-      value: z.number(),
-      enabled: z.boolean(),
-    })
-  );
+  const obj = variable<{
+    name: string;
+    value: number;
+    enabled: boolean;
+  }>();
 
   // 访问 name 属性
   const nameExpr = expr({ obj })("obj.name");
@@ -31,12 +28,10 @@ test("集成测试：基础对象属性访问", () => {
 
 test("集成测试：对象属性在表达式中的计算", () => {
   // 测试使用对象属性进行数学运算（如 obj.value * 2）
-  const obj = variable(
-    z.object({
-      value: z.number(),
-      multiplier: z.number(),
-    })
-  );
+  const obj = variable<{
+    value: number;
+    multiplier: number;
+  }>();
 
   // 简单乘法
   const doubleExpr = expr({ obj })("obj.value * 2");
@@ -56,17 +51,15 @@ test("集成测试：对象属性在表达式中的计算", () => {
 
 test("集成测试：嵌套对象属性访问", () => {
   // 测试创建嵌套对象并测试多层属性链访问
-  const profile = variable(
-    z.object({
-      user: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
-      settings: z.object({
-        theme: z.string(),
-      }),
-    })
-  );
+  const profile = variable<{
+    user: {
+      name: string;
+      age: number;
+    };
+    settings: {
+      theme: string;
+    };
+  }>();
 
   // 访问嵌套的 user.name
   const userNameExpr = expr({ profile })("profile.user.name");
@@ -107,18 +100,16 @@ test("集成测试：嵌套对象属性访问", () => {
 
 test("集成测试：深层嵌套对象", () => {
   // 测试三层以上的嵌套结构并验证深层属性访问
-  const config = variable(
-    z.object({
-      level1: z.object({
-        level2: z.object({
-          level3: z.object({
-            value: z.number(),
-            label: z.string(),
-          }),
-        }),
-      }),
-    })
-  );
+  const config = variable<{
+    level1: {
+      level2: {
+        level3: {
+          value: number;
+          label: string;
+        };
+      };
+    };
+  }>();
 
   // 访问深层 value 属性
   const deepValueExpr = expr({ config })("config.level1.level2.level3.value");
@@ -150,12 +141,10 @@ test("集成测试：深层嵌套对象", () => {
 
 test("集成测试：对象内数组方法", () => {
   // 测试包含 numbers 数组和 sum 方法的对象，测试方法调用
-  const obj = variable(
-    z.object({
-      numbers: z.array(z.number()),
-      sum: z.function({ input: [], output: z.number() }),
-    })
-  );
+  const obj = variable<{
+    numbers: number[];
+    sum: () => number;
+  }>();
 
   // 调用对象方法
   const sumExpr = expr({ obj })("obj.sum()");
@@ -173,14 +162,12 @@ test("集成测试：对象内数组方法", () => {
 
 test("集成测试：多个对象方法调用", () => {
   // 测试对象包含多个方法（如 getMax(), getMin(), getAverage()）
-  const stats = variable(
-    z.object({
-      numbers: z.array(z.number()),
-      getMax: z.function({ input: [], output: z.number() }),
-      getMin: z.function({ input: [], output: z.number() }),
-      getAverage: z.function({ input: [], output: z.number() }),
-    })
-  );
+  const stats = variable<{
+    numbers: number[];
+    getMax: () => number;
+    getMin: () => number;
+    getAverage: () => number;
+  }>();
 
   // 获取最大值
   const maxExpr = expr({ stats })("stats.getMax()");

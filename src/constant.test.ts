@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, constant, evaluate, expr, variable } from "./index";
 
 test("constant: 数字常量", () => {
@@ -46,7 +45,7 @@ test("constant: 对象常量", () => {
 
 test("constant: 在表达式中使用常量", () => {
   const PI = constant(3.14159);
-  const radius = variable(z.number());
+  const radius = variable<number>();
   const area = expr({ PI, radius })("PI * radius * radius");
 
   const compiled = compile(area, { radius });
@@ -66,7 +65,7 @@ test("constant: 多个常量组合", () => {
 
 test("constant: 常量与变量混合", () => {
   const multiplier = constant(2);
-  const x = variable(z.number());
+  const x = variable<number>();
   const doubled = expr({ multiplier, x })("multiplier * x");
 
   const compiled = compile(doubled, { x });

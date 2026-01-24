@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, expr, variable } from "./index";
 
 describe("compile 单元测试", () => {
   describe("编译输出格式", () => {
     test("基本结构: [变量名数组, ...表达式]", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const result = compile(sum, { x, y });
@@ -17,8 +16,8 @@ describe("compile 单元测试", () => {
     });
 
     test("变量占位符替换", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const result = compile(sum, { x, y });
@@ -28,9 +27,9 @@ describe("compile 单元测试", () => {
     });
 
     test("变量顺序与声明顺序一致", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const expr1 = expr({ a, b, c })("c + b + a");
       const result = compile(expr1, { a, b, c });
@@ -39,8 +38,8 @@ describe("compile 单元测试", () => {
     });
 
     test("相似变量名正确区分", () => {
-      const x = variable(z.number());
-      const xy = variable(z.number());
+      const x = variable<number>();
+      const xy = variable<number>();
 
       // xy 不应该被 x 的替换影响
       const e = expr({ xy, x })("xy + x");
@@ -53,8 +52,8 @@ describe("compile 单元测试", () => {
 
   describe("错误检测", () => {
     test("检测未定义的变量引用", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y + z");
 
@@ -64,7 +63,7 @@ describe("compile 单元测试", () => {
     });
 
     test("检测表达式中引用不存在的上下文变量", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       const e1 = expr({ x })("x + 1");
       const e2 = expr({ e1 })("e1 + e2"); // e2 不存在
@@ -77,8 +76,8 @@ describe("compile 单元测试", () => {
 
   describe("内联优化输出", () => {
     test("内联模式减少表达式数量", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const product = expr({ x, y })("x * y");
@@ -92,8 +91,8 @@ describe("compile 单元测试", () => {
     });
 
     test("非内联模式保留所有中间表达式", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const product = expr({ x, y })("x * y");
@@ -111,8 +110,8 @@ describe("compile 单元测试", () => {
 
   describe("AST 规范化", () => {
     test("输出不包含多余空格", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       // 原始表达式有空格
       const e = expr({ x, y })("x + y * 2");
@@ -123,8 +122,8 @@ describe("compile 单元测试", () => {
     });
 
     test("保留必要的括号", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const e = expr({ x, y })("(x + y) * 2");
       const result = compile(e, { x, y });

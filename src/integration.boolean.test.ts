@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("集成测试：布尔表达式", () => {
   describe("比较运算符", () => {
     test("数值比较", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const tests = [
         { expr: "x < y", values: { x: 1, y: 2 }, expected: true },
@@ -24,8 +23,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("相等性比较", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const eqExpr = expr({ x, y })("x === y");
       const neqExpr = expr({ x, y })("x !== y");
@@ -40,8 +39,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("宽松相等与严格相等", () => {
-      const x = variable(z.union([z.number(), z.string()]));
-      const y = variable(z.union([z.number(), z.string()]));
+      const x = variable<number | string>();
+      const y = variable<number | string>();
 
       const looseEq = expr({ x, y })("x == y");
       const strictEq = expr({ x, y })("x === y");
@@ -56,8 +55,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("字符串比较", () => {
-      const a = variable(z.string());
-      const b = variable(z.string());
+      const a = variable<string>();
+      const b = variable<string>();
 
       const ltExpr = expr({ a, b })("a < b");
       const compiled = compile(ltExpr, { a, b });
@@ -70,8 +69,8 @@ describe("集成测试：布尔表达式", () => {
 
   describe("逻辑运算符", () => {
     test("逻辑与", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
 
       const andExpr = expr({ a, b })("a && b");
       const compiled = compile(andExpr, { a, b });
@@ -83,8 +82,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("逻辑或", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
 
       const orExpr = expr({ a, b })("a || b");
       const compiled = compile(orExpr, { a, b });
@@ -96,8 +95,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("逻辑或返回值特性", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const orExpr = expr({ a, b })("a || b");
       const compiled = compile(orExpr, { a, b });
@@ -109,8 +108,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("逻辑与返回值特性", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const andExpr = expr({ a, b })("a && b");
       const compiled = compile(andExpr, { a, b });
@@ -122,8 +121,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("空值合并运算符", () => {
-      const a = variable(z.union([z.number(), z.null(), z.undefined()]));
-      const b = variable(z.number());
+      const a = variable<number | null | undefined>();
+      const b = variable<number>();
 
       const nullishExpr = expr({ a, b })("a ?? b");
       const compiled = compile(nullishExpr, { a, b });
@@ -138,9 +137,9 @@ describe("集成测试：布尔表达式", () => {
 
   describe("三元表达式", () => {
     test("基础三元表达式", () => {
-      const cond = variable(z.boolean());
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const cond = variable<boolean>();
+      const x = variable<number>();
+      const y = variable<number>();
 
       const ternary = expr({ cond, x, y })("cond ? x : y");
       const compiled = compile(ternary, { cond, x, y });
@@ -150,7 +149,7 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("三元表达式中的复杂条件", () => {
-      const age = variable(z.number());
+      const age = variable<number>();
 
       const category = expr({ age })('age >= 18 ? "adult" : "minor"');
       const compiled = compile(category, { age });
@@ -161,7 +160,7 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("嵌套三元表达式", () => {
-      const score = variable(z.number());
+      const score = variable<number>();
 
       const grade = expr({ score })('score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F"');
       const compiled = compile(grade, { score });
@@ -173,8 +172,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("三元表达式与运算结合", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       // 返回较大数的绝对值
       const absMax = expr({ x, y })("x > y ? (x > 0 ? x : -x) : (y > 0 ? y : -y)");
@@ -189,8 +188,8 @@ describe("集成测试：布尔表达式", () => {
 
   describe("复合布尔逻辑", () => {
     test("多变量布尔逻辑组合", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const isGreater = expr({ x, y })("x > y");
       const isEqual = expr({ x, y })("x === y");
@@ -204,9 +203,9 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("运算符优先级: && 优先于 ||", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
 
       // a || b && c 等价于 a || (b && c)
       const result = expr({ a, b, c })("a || b && c");
@@ -219,9 +218,9 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("括号改变逻辑运算优先级", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
 
       // (a || b) && c
       const result = expr({ a, b, c })("(a || b) && c");
@@ -233,8 +232,8 @@ describe("集成测试：布尔表达式", () => {
     });
 
     test("德摩根定律验证", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
 
       // !(a && b) 等价于 !a || !b
       const leftCompiled = compile(expr({ a, b })("!(a && b)"), { a, b });
@@ -257,8 +256,8 @@ describe("集成测试：布尔表达式", () => {
 
   describe("in 运算符", () => {
     test("检查对象属性", () => {
-      const obj = variable(z.record(z.string(), z.number()));
-      const key = variable(z.string());
+      const obj = variable<Record<string, number>>();
+      const key = variable<string>();
 
       const hasKey = expr({ key, obj })("key in obj");
       const compiled = compile(hasKey, { key, obj });

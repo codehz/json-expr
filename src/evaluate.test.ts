@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("evaluate 单元测试", () => {
   describe("缓存机制", () => {
     test("重复调用使用缓存的求值函数", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
       const sum = expr({ x })("x + 1");
       const compiled = compile(sum, { x });
 
@@ -19,8 +18,8 @@ describe("evaluate 单元测试", () => {
 
   describe("错误处理", () => {
     test("缺少必需变量时抛出错误", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const compiled = compile(sum, { x, y });
@@ -31,9 +30,9 @@ describe("evaluate 单元测试", () => {
     });
 
     test("缺少多个变量时报告第一个", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const e = expr({ a, b, c })("a + b + c");
       const compiled = compile(e, { a, b, c });
@@ -53,8 +52,8 @@ describe("evaluate 单元测试", () => {
     });
 
     test("undefined 和 null 值", () => {
-      const x = variable(z.union([z.number(), z.null(), z.undefined()]));
-      const y = variable(z.number());
+      const x = variable<number | null | undefined>();
+      const y = variable<number>();
 
       const e = expr({ x, y })("x ?? y");
       const compiled = compile(e, { x, y });

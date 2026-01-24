@@ -1,13 +1,10 @@
-import { z } from "zod";
-
 /**
  * 表示一个类型化变量
- * @template T - Zod schema 类型
+ * @template T - 变量的值类型
  */
-export type Variable<T extends z.ZodType = z.ZodType> = {
+export type Variable<T = unknown> = {
   _tag: "variable";
-  schema: T;
-  _type: z.infer<T>; // 仅用于类型推导，运行时不存在
+  _type: T; // 仅用于类型推导，运行时不存在
 };
 
 /**
@@ -65,7 +62,6 @@ export type CompiledData = [variableNames: string[], ...expressions: CompiledExp
 export interface ExprNode {
   id: symbol;
   tag: "variable" | "expression";
-  schema?: z.ZodType;
   context?: Record<string, ExprNode>;
   source?: string;
 }
@@ -83,14 +79,14 @@ export interface CompileContext {
  * 从 Variable 推导值类型
  * @template V - Variable 类型
  */
-export type InferVariableType<V> = V extends Variable<infer T> ? z.infer<T> : never;
+export type InferVariableType<V> = V extends Variable<infer T> ? T : never;
 
 /**
  * 从上下文对象推导各项的类型
  * @template C - 上下文对象类型
  */
 export type InferContextType<C> = {
-  [K in keyof C]: C[K] extends Variable<infer T> ? z.infer<T> : C[K] extends Expression<unknown, infer R> ? R : never;
+  [K in keyof C]: C[K] extends Variable<infer T> ? T : C[K] extends Expression<unknown, infer R> ? R : never;
 };
 
 /**

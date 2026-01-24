@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 test("集成测试：基础函数调用", () => {
   // 定义单参数函数 double(x: number) => x * 2
-  const double = variable(z.function({ input: [z.number()], output: z.number() }));
-  const x = variable(z.number());
+  const double = variable<(x: number) => number>();
+  const x = variable<number>();
 
   const doubleCallExpr = expr({ double, x })("double(x)");
   const doubleCompiled = compile(doubleCallExpr, { double, x });
@@ -19,9 +18,9 @@ test("集成测试：基础函数调用", () => {
 
 test("集成测试：多参数函数", () => {
   // 定义多参数函数 add(a: number, b: number) => a + b
-  const add = variable(z.function({ input: [z.number(), z.number()], output: z.number() }));
-  const a = variable(z.number());
-  const b = variable(z.number());
+  const add = variable<(a: number, b: number) => number>();
+  const a = variable<number>();
+  const b = variable<number>();
 
   const addExpr = expr({ add, a, b })("add(a, b)");
   const addCompiled = compile(addExpr, { add, a, b });
@@ -44,7 +43,7 @@ test("集成测试：多参数函数", () => {
 
 test("集成测试：函数返回对象", () => {
   // 定义返回对象的函数 getUser() => ({ name: string, age: number })
-  const getUser = variable(z.function({ input: [], output: z.object({ name: z.string(), age: z.number() }) }));
+  const getUser = variable<() => { name: string; age: number }>();
 
   // 调用函数并访问返回对象的属性
   const userNameExpr = expr({ getUser })("getUser().name");

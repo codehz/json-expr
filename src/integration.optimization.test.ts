@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("集成测试：编译优化", () => {
   describe("内联优化", () => {
     test("单次引用的表达式被内联", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const product = expr({ x, y })("x * y");
@@ -32,7 +31,7 @@ describe("集成测试：编译优化", () => {
     });
 
     test("多次引用的表达式处理", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       // sum 被引用两次
       const sum = expr({ x })("x + 1");
@@ -49,8 +48,8 @@ describe("集成测试：编译优化", () => {
     });
 
     test("部分内联：混合单次和多次引用", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const a = expr({ x })("x + 1"); // 被引用一次
       const b = expr({ y })("y * 2"); // 被引用两次
@@ -72,7 +71,7 @@ describe("集成测试：编译优化", () => {
 
   describe("复杂表达式优化", () => {
     test("深层嵌套表达式优化", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       const e1 = expr({ x })("x + 1");
       const e2 = expr({ e1 })("e1 * 2");
@@ -94,8 +93,8 @@ describe("集成测试：编译优化", () => {
     });
 
     test("分支共享的表达式", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       // base 被两个分支共享
       const base = expr({ x, y })("x + y");
@@ -120,8 +119,8 @@ describe("集成测试：编译优化", () => {
 
   describe("优化正确性验证", () => {
     test("各种数值范围", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const e = expr({ x, y })("x * y + x / y");
       const optimized = compile(e, { x, y });
@@ -144,7 +143,7 @@ describe("集成测试：编译优化", () => {
     });
 
     test("特殊数值处理", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       const e = expr({ x })("x + 1");
       const compiled = compile(e, { x });

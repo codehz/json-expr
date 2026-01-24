@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 test("集成测试：Math 数学函数 - 基本函数", () => {
-  const x = variable(z.number());
+  const x = variable<number>();
 
   // Math.abs - 绝对值
   const absExpr = expr({ x })("Math.abs(x)");
@@ -24,7 +23,7 @@ test("集成测试：Math 数学函数 - 基本函数", () => {
 });
 
 test("集成测试：Math 数学函数 - 三角函数", () => {
-  const angle = variable(z.number());
+  const angle = variable<number>();
 
   // Math.sin
   const sinExpr = expr({ angle })("Math.sin(angle)");
@@ -46,8 +45,8 @@ test("集成测试：Math 数学函数 - 三角函数", () => {
 });
 
 test("集成测试：Math 数学函数 - 幂和对数", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const x = variable<number>();
+  const y = variable<number>();
 
   // Math.pow - 幂运算
   const powExpr = expr({ x, y })("Math.pow(x, y)");
@@ -75,7 +74,7 @@ test("集成测试：Math 数学函数 - 幂和对数", () => {
 });
 
 test("集成测试：Math 数学函数 - 取整函数", () => {
-  const x = variable(z.number());
+  const x = variable<number>();
 
   // Math.floor - 向下取整
   const floorExpr = expr({ x })("Math.floor(x)");
@@ -103,9 +102,9 @@ test("集成测试：Math 数学函数 - 取整函数", () => {
 });
 
 test("集成测试：Math 数学函数 - 最值函数", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
-  const zVar = variable(z.number());
+  const x = variable<number>();
+  const y = variable<number>();
+  const zVar = variable<number>();
 
   // Math.min
   const minExpr = expr({ x, y })("Math.min(x, y)");
@@ -130,8 +129,8 @@ test("集成测试：Math 数学函数 - 最值函数", () => {
 });
 
 test("集成测试：Math 数学函数 - 组合使用", () => {
-  const x = variable(z.number());
-  const y = variable(z.number());
+  const x = variable<number>();
+  const y = variable<number>();
 
   // 计算两点距离: sqrt(x^2 + y^2)
   const distance = expr({ x, y })("Math.sqrt(x * x + y * y)");
@@ -152,8 +151,8 @@ test("集成测试：Math 数学函数 - 组合使用", () => {
 });
 
 test("集成测试：Math 数学函数 - 嵌套表达式中使用", () => {
-  const r = variable(z.number());
-  const theta = variable(z.number());
+  const r = variable<number>();
+  const theta = variable<number>();
 
   // 极坐标转笛卡尔坐标
   const xCoord = expr({ r, theta })("r * Math.cos(theta)");
@@ -180,7 +179,7 @@ test("集成测试：Math 数学函数 - 嵌套表达式中使用", () => {
 });
 
 test("集成测试：Math 常量", () => {
-  const x = variable(z.number());
+  const x = variable<number>();
 
   // 使用 Math.PI
   const circumference = expr({ x })("2 * Math.PI * x"); // 周长 = 2πr

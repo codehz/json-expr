@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { z } from "zod";
 import { expr, variable } from "./index";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 
@@ -15,8 +14,8 @@ type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ?
 // ============================================================================
 
 test("类型测试：简单表达式的标识符提取", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   // 验证表达式验证通过
   type Context = { x: typeof _x; y: typeof _y };
@@ -27,7 +26,7 @@ test("类型测试：简单表达式的标识符提取", () => {
 });
 
 test("类型测试：检测未定义的标识符", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   type Result = ValidateExpression<"x + z", Context>;
@@ -39,7 +38,7 @@ test("类型测试：检测未定义的标识符", () => {
 });
 
 test("类型测试：跳过保留字和字面量", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   // true, false, null 等保留字应该被跳过
@@ -54,8 +53,8 @@ test("类型测试：跳过保留字和字面量", () => {
 // ============================================================================
 
 test("类型测试：数字加法推导为 number", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x + y", Context>;
@@ -65,8 +64,8 @@ test("类型测试：数字加法推导为 number", () => {
 });
 
 test("类型测试：比较运算推导为 boolean", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x > y", Context>;
@@ -76,8 +75,8 @@ test("类型测试：比较运算推导为 boolean", () => {
 });
 
 test("类型测试：字符串加法推导为 string", () => {
-  const _a = variable(z.string());
-  const _b = variable(z.string());
+  const _a = variable<string>();
+  const _b = variable<string>();
 
   type Context = { a: typeof _a; b: typeof _b };
   type Result = InferExpressionResult<"a + b", Context>;
@@ -87,8 +86,8 @@ test("类型测试：字符串加法推导为 string", () => {
 });
 
 test("类型测试：乘法推导为 number", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"x * y", Context>;
@@ -98,7 +97,7 @@ test("类型测试：乘法推导为 number", () => {
 });
 
 test("类型测试：逻辑非推导为 boolean", () => {
-  const _x = variable(z.boolean());
+  const _x = variable<boolean>();
 
   type Context = { x: typeof _x };
   type Result = InferExpressionResult<"!x", Context>;
@@ -108,7 +107,7 @@ test("类型测试：逻辑非推导为 boolean", () => {
 });
 
 test("类型测试：三元表达式推导为分支类型的联合", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   // x > 0 ? 1 : 0  =>  number | number => number
@@ -123,8 +122,8 @@ test("类型测试：三元表达式推导为分支类型的联合", () => {
 // ============================================================================
 
 test("expr 函数返回正确推导的类型", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   const _sum = expr({ x: _x, y: _y })("x + y");
 
@@ -137,8 +136,8 @@ test("expr 函数返回正确推导的类型", () => {
 });
 
 test("expr 函数支持嵌套表达式", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   const _sum = expr({ x: _x, y: _y })("x + y");
   const _doubled = expr({ sum: _sum })("sum * 2");
@@ -150,7 +149,7 @@ test("expr 函数支持嵌套表达式", () => {
 });
 
 test("expr 函数正确推导比较表达式", () => {
-  const _age = variable(z.number());
+  const _age = variable<number>();
 
   const _isAdult = expr({ age: _age })("age >= 18");
 
@@ -161,8 +160,8 @@ test("expr 函数正确推导比较表达式", () => {
 });
 
 test("expr 函数正确推导复杂表达式", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   // (x + y) * 2 - 1
   const _complex = expr({ x: _x, y: _y })("(x + y) * 2 - 1");
@@ -174,8 +173,8 @@ test("expr 函数正确推导复杂表达式", () => {
 });
 
 test("expr 函数正确推导逻辑表达式", () => {
-  const _a = variable(z.boolean());
-  const _b = variable(z.boolean());
+  const _a = variable<boolean>();
+  const _b = variable<boolean>();
 
   const _result = expr({ a: _a, b: _b })("a && b || !a");
 
@@ -187,8 +186,8 @@ test("expr 函数正确推导逻辑表达式", () => {
 });
 
 test("expr 函数处理字符串表达式", () => {
-  const _firstName = variable(z.string());
-  const _lastName = variable(z.string());
+  const _firstName = variable<string>();
+  const _lastName = variable<string>();
 
   const _fullName = expr({ firstName: _firstName, lastName: _lastName })("firstName + lastName");
 
@@ -203,8 +202,8 @@ test("expr 函数处理字符串表达式", () => {
 // ============================================================================
 
 test("完整流程：类型推导 + 编译 + 执行", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   // 类型自动推导
   const _sum = expr({ x: _x, y: _y })("x + y");
@@ -226,7 +225,7 @@ test("完整流程：类型推导 + 编译 + 执行", () => {
 // ============================================================================
 
 test("类型测试：空表达式处理", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   type Result = ValidateExpression<"", Context>;
@@ -238,7 +237,7 @@ test("类型测试：空表达式处理", () => {
 });
 
 test("类型测试：只有数字字面量", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   type Result = InferExpressionResult<"42", Context>;
@@ -248,8 +247,8 @@ test("类型测试：只有数字字面量", () => {
 });
 
 test("类型测试：带括号的表达式", () => {
-  const _x = variable(z.number());
-  const _y = variable(z.number());
+  const _x = variable<number>();
+  const _y = variable<number>();
 
   type Context = { x: typeof _x; y: typeof _y };
   type Result = InferExpressionResult<"(x + y) * 2", Context>;
@@ -259,7 +258,7 @@ test("类型测试：带括号的表达式", () => {
 });
 
 test("类型测试：一元负号", () => {
-  const _x = variable(z.number());
+  const _x = variable<number>();
 
   type Context = { x: typeof _x };
   type Result = InferExpressionResult<"-x", Context>;

@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("集成测试：复杂表达式组合", () => {
   describe("对象属性与函数组合", () => {
     test("函数调用对象属性", () => {
-      const double = variable(z.function({ input: [z.number()], output: z.number() }));
-      const obj = variable(z.object({ value: z.number() }));
+      const double = variable<(n: number) => number>();
+      const obj = variable<{ value: number }>();
 
       const combinedExpr = expr({ double, obj })("double(obj.value)");
       const compiled = compile(combinedExpr, { double, obj });
@@ -15,14 +14,12 @@ describe("集成测试：复杂表达式组合", () => {
     });
 
     test("嵌套对象属性运算", () => {
-      const obj = variable(
-        z.object({
-          user: z.object({
-            name: z.string(),
-            age: z.number(),
-          }),
-        })
-      );
+      const obj = variable<{
+        user: {
+          name: string;
+          age: number;
+        };
+      }>();
 
       const ageCalcExpr = expr({ obj })("obj.user.age * 2 + 10");
       const compiled = compile(ageCalcExpr, { obj });
@@ -33,9 +30,9 @@ describe("集成测试：复杂表达式组合", () => {
 
   describe("多函数组合", () => {
     test("函数链式调用", () => {
-      const multiply = variable(z.function({ input: [z.number(), z.number()], output: z.number() }));
-      const add = variable(z.function({ input: [z.number(), z.number()], output: z.number() }));
-      const data = variable(z.object({ x: z.number(), y: z.number() }));
+      const multiply = variable<(a: number, b: number) => number>();
+      const add = variable<(a: number, b: number) => number>();
+      const data = variable<{ x: number; y: number }>();
 
       // multiply(data.x, data.y) + add(data.x, data.y)
       const e1 = expr({ multiply, add, data })("multiply(data.x, data.y) + add(data.x, data.y)");
@@ -63,8 +60,8 @@ describe("集成测试：复杂表达式组合", () => {
 
   describe("条件与计算混合", () => {
     test("条件表达式中使用复杂计算", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       // 根据条件选择不同的计算方式
       const e = expr({ x, y })("x > y ? x * x - y : y * y - x");
@@ -75,9 +72,9 @@ describe("集成测试：复杂表达式组合", () => {
     });
 
     test("布尔逻辑控制计算路径", () => {
-      const enabled = variable(z.boolean());
-      const value = variable(z.number());
-      const multiplier = variable(z.number());
+      const enabled = variable<boolean>();
+      const value = variable<number>();
+      const multiplier = variable<number>();
 
       const e = expr({ enabled, value, multiplier })("enabled && value > 0 ? value * multiplier : 0");
       const compiled = compile(e, { enabled, value, multiplier });
@@ -90,8 +87,8 @@ describe("集成测试：复杂表达式组合", () => {
 
   describe("表达式依赖链", () => {
     test("多层依赖的复杂表达式", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const sum = expr({ x, y })("x + y");
       const diff = expr({ x, y })("x - y");
@@ -107,7 +104,7 @@ describe("集成测试：复杂表达式组合", () => {
     });
 
     test("菱形依赖结构", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       //       base
       //      /    \
@@ -128,10 +125,10 @@ describe("集成测试：复杂表达式组合", () => {
 
   describe("实际场景模拟", () => {
     test("价格计算", () => {
-      const price = variable(z.number());
-      const quantity = variable(z.number());
-      const discount = variable(z.number());
-      const taxRate = variable(z.number());
+      const price = variable<number>();
+      const quantity = variable<number>();
+      const discount = variable<number>();
+      const taxRate = variable<number>();
 
       const subtotal = expr({ price, quantity })("price * quantity");
       const discounted = expr({ subtotal, discount })("subtotal * (1 - discount)");
@@ -145,9 +142,9 @@ describe("集成测试：复杂表达式组合", () => {
     });
 
     test("坐标变换", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
-      const angle = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
+      const angle = variable<number>();
 
       // 旋转变换
       const rotatedX = expr({ x, y, angle })("x * Math.cos(angle) - y * Math.sin(angle)");
@@ -165,9 +162,9 @@ describe("集成测试：复杂表达式组合", () => {
     });
 
     test("条件评分系统", () => {
-      const score = variable(z.number());
-      const bonus = variable(z.number());
-      const penalty = variable(z.number());
+      const score = variable<number>();
+      const bonus = variable<number>();
+      const penalty = variable<number>();
 
       const adjusted = expr({ score, bonus, penalty })("score + bonus - penalty");
       const clamped = expr({ adjusted })("Math.max(0, Math.min(100, adjusted))");

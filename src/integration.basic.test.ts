@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("集成测试：基础表达式", () => {
   describe("变量与表达式组合", () => {
     test("多层嵌套表达式", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const layer1 = expr({ a, b })("a + b");
       const layer2 = expr({ layer1, c })("layer1 * c");
@@ -20,7 +19,7 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("链式计算", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       const expr1 = expr({ x })("x + 1");
       const expr2 = expr({ expr1 })("expr1 * 2");
@@ -31,7 +30,7 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("引用不存在的表达式变量应该报错", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
 
       const expr1 = expr({ x })("x + 1");
       const expr2 = expr({ expr1 })("expr1 * 2");
@@ -44,8 +43,8 @@ describe("集成测试：基础表达式", () => {
 
   describe("运算符优先级", () => {
     test("乘法优先于加法", () => {
-      const p = variable(z.number());
-      const q = variable(z.number());
+      const p = variable<number>();
+      const q = variable<number>();
 
       const calc = expr({ p, q })("p + q * 2");
       const compiled = compile(calc, { p, q });
@@ -53,8 +52,8 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("括号改变优先级", () => {
-      const p = variable(z.number());
-      const q = variable(z.number());
+      const p = variable<number>();
+      const q = variable<number>();
 
       const calc = expr({ p, q })("(p + q) * 2");
       const compiled = compile(calc, { p, q });
@@ -62,9 +61,9 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("复杂运算符组合", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const calc = expr({ a, b, c })("a * b + c / 2 - a % b");
       const compiled = compile(calc, { a, b, c });
@@ -75,8 +74,8 @@ describe("集成测试：基础表达式", () => {
 
   describe("类型混合", () => {
     test("字符串拼接", () => {
-      const a = variable(z.string());
-      const b = variable(z.string());
+      const a = variable<string>();
+      const b = variable<string>();
 
       const combined = expr({ a, b })("a + b");
       const compiled = compile(combined, { a, b });
@@ -84,8 +83,8 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("数字与字符串混合拼接", () => {
-      const str = variable(z.string());
-      const num = variable(z.number());
+      const str = variable<string>();
+      const num = variable<number>();
 
       const combined = expr({ str, num })('str + ": " + num');
       const compiled = compile(combined, { str, num });
@@ -95,7 +94,7 @@ describe("集成测试：基础表达式", () => {
 
   describe("一元运算符", () => {
     test("负号", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
       const negated = expr({ x })("-x");
       const compiled = compile(negated, { x });
       expect(evaluate<number>(compiled, { x: 5 })).toBe(-5);
@@ -103,7 +102,7 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("逻辑非", () => {
-      const flag = variable(z.boolean());
+      const flag = variable<boolean>();
       const notFlag = expr({ flag })("!flag");
       const compiled = compile(notFlag, { flag });
       expect(evaluate<boolean>(compiled, { flag: true })).toBe(false);
@@ -111,7 +110,7 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("双重否定", () => {
-      const flag = variable(z.boolean());
+      const flag = variable<boolean>();
       const doubleNot = expr({ flag })("!!flag");
       const compiled = compile(doubleNot, { flag });
       expect(evaluate<boolean>(compiled, { flag: true })).toBe(true);
@@ -119,7 +118,7 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("typeof 运算符", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
       const typeExpr = expr({ x })("typeof x");
       const compiled = compile(typeExpr, { x });
       expect(evaluate<string>(compiled, { x: 42 })).toBe("number");
@@ -128,8 +127,8 @@ describe("集成测试：基础表达式", () => {
 
   describe("幂运算", () => {
     test("基础幂运算", () => {
-      const base = variable(z.number());
-      const exp = variable(z.number());
+      const base = variable<number>();
+      const exp = variable<number>();
 
       const power = expr({ base, exp })("base ** exp");
       const compiled = compile(power, { base, exp });
@@ -137,9 +136,9 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("幂运算右结合", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       // 2 ** 3 ** 2 = 2 ** 9 = 512 (右结合)
       const power = expr({ a, b, c })("a ** b ** c");
@@ -150,8 +149,8 @@ describe("集成测试：基础表达式", () => {
 
   describe("位运算", () => {
     test("按位与、或、异或", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const andExpr = expr({ a, b })("a & b");
       const orExpr = expr({ a, b })("a | b");
@@ -168,15 +167,15 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("按位取反", () => {
-      const x = variable(z.number());
+      const x = variable<number>();
       const notExpr = expr({ x })("~x");
       const compiled = compile(notExpr, { x });
       expect(evaluate<number>(compiled, { x: 5 })).toBe(-6); // ~5 = -6
     });
 
     test("位移运算", () => {
-      const x = variable(z.number());
-      const n = variable(z.number());
+      const x = variable<number>();
+      const n = variable<number>();
 
       const leftShift = expr({ x, n })("x << n");
       const rightShift = expr({ x, n })("x >> n");
@@ -194,8 +193,8 @@ describe("集成测试：基础表达式", () => {
 
   describe("数组和对象字面量", () => {
     test("数组字面量", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const arr = expr({ a, b })("[a, b, a + b]");
       const compiled = compile(arr, { a, b });
@@ -203,8 +202,8 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("对象字面量", () => {
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const x = variable<number>();
+      const y = variable<number>();
 
       const obj = expr({ x, y })("{ a: x, b: y, sum: x + y }");
       const compiled = compile(obj, { x, y });
@@ -216,8 +215,8 @@ describe("集成测试：基础表达式", () => {
     });
 
     test("嵌套数组和对象", () => {
-      const a = variable(z.number());
-      const b = variable(z.string());
+      const a = variable<number>();
+      const b = variable<string>();
 
       const nested = expr({ a, b })("{ arr: [a, a * 2], name: b }");
       const compiled = compile(nested, { a, b });

@@ -1,11 +1,10 @@
-import { z } from "zod";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 import type { Expression, Variable } from "./types";
 
 /**
  * 表达式上下文类型约束
  */
-type ExprContext = Record<string, Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>>;
+type ExprContext = Record<string, Variable | Expression<Record<string, unknown>, unknown>>;
 
 /**
  * 表达式错误类型

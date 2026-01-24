@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import type { Expression, Variable } from "./types";
 
 // ============================================================================
@@ -232,8 +231,7 @@ type ExtractIdentifiers<S extends string, Collected extends string = never> = S 
 // ============================================================================
 
 /** 从 Variable 或 Expression 提取值类型 */
-export type ExtractType<T> =
-  T extends Variable<infer Schema> ? z.infer<Schema> : T extends Expression<unknown, infer R> ? R : never;
+export type ExtractType<T> = T extends Variable<infer V> ? V : T extends Expression<unknown, infer R> ? R : never;
 
 /** 从上下文对象构建类型映射 */
 export type ContextTypeMap<TContext> = {

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { collectIdentifiers, generate, parse, type ASTNode } from "./parser";
 import type {
   BranchNode,
@@ -34,7 +33,7 @@ export interface CompileOptions {
 /**
  * 表达式上下文类型约束
  */
-type ExpressionContext = Record<string, Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>>;
+type ExpressionContext = Record<string, Variable | Expression<Record<string, unknown>, unknown>>;
 
 /**
  * 将表达式树编译为可序列化的 JSON 结构
@@ -59,7 +58,7 @@ type ExpressionContext = Record<string, Variable<z.ZodType> | Expression<Record<
  */
 export function compile<TResult>(
   expression: Expression<ExpressionContext, TResult>,
-  variables: Record<string, Variable<z.ZodType>>,
+  variables: Record<string, Variable>,
   options: CompileOptions = {}
 ): CompiledData {
   const { inline = true, shortCircuit = true } = options;
@@ -87,12 +86,11 @@ export function compile<TResult>(
   const visited = new Set<symbol>();
   const visiting = new Set<symbol>();
 
-  for (const [name, variable] of Object.entries(variables)) {
+  for (const [name] of Object.entries(variables)) {
     const id = Symbol(`var:${name}`);
     const node: ExprNode = {
       id,
       tag: "variable",
-      schema: variable.schema,
     };
     nodeMap.set(id, node);
     variableNodes.set(name, node);
@@ -117,7 +115,7 @@ export function compile<TResult>(
 
     // 收集表达式上下文中的所有节点
     for (const [key, contextItem] of Object.entries(expr.context)) {
-      const item = contextItem as Variable<z.ZodType> | Expression<Record<string, unknown>, unknown>;
+      const item = contextItem as Variable | Expression<Record<string, unknown>, unknown>;
       if (item._tag === "variable") {
         const varNode = variableNodes.get(key);
         if (!varNode) {

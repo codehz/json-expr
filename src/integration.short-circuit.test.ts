@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { compile, evaluate, expr, variable } from "./index";
 
 describe("短路求值测试", () => {
   describe("逻辑或 (||)", () => {
     test("短路: 左边为 true 时跳过右边", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
 
       const result = expr({ a, b })("a || b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -21,8 +20,8 @@ describe("短路求值测试", () => {
     });
 
     test("短路: 返回第一个 truthy 值", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a || b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -34,8 +33,8 @@ describe("短路求值测试", () => {
 
   describe("逻辑与 (&&)", () => {
     test("短路: 左边为 false 时跳过右边", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
 
       const result = expr({ a, b })("a && b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -48,8 +47,8 @@ describe("短路求值测试", () => {
     });
 
     test("短路: 返回第一个 falsy 值或最后一个值", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a && b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -61,8 +60,8 @@ describe("短路求值测试", () => {
 
   describe("空值合并 (??)", () => {
     test("短路: 左边非 null/undefined 时跳过右边", () => {
-      const a = variable(z.union([z.number(), z.null()]));
-      const b = variable(z.number());
+      const a = variable<number | null>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a ?? b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -77,9 +76,9 @@ describe("短路求值测试", () => {
 
   describe("三元表达式 (?:)", () => {
     test("短路: 只执行对应分支", () => {
-      const cond = variable(z.boolean());
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const cond = variable<boolean>();
+      const x = variable<number>();
+      const y = variable<number>();
 
       const result = expr({ cond, x, y })("cond ? x * 2 : y * 3");
       const compiled = compile(result, { cond, x, y }, { shortCircuit: true });
@@ -93,9 +92,9 @@ describe("短路求值测试", () => {
 
   describe("嵌套控制流", () => {
     test("(a || b) && c", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
 
       const orExpr = expr({ a, b })("a || b");
       const result = expr({ orExpr, c })("orExpr && c");
@@ -108,11 +107,11 @@ describe("短路求值测试", () => {
     });
 
     test("a ? b || c : d && e", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
-      const e = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
+      const e = variable<boolean>();
 
       const result = expr({ a, b, c, d, e })("a ? b || c : d && e");
       const compiled = compile(result, { a, b, c, d, e }, { shortCircuit: true });
@@ -127,11 +126,11 @@ describe("短路求值测试", () => {
     });
 
     test("嵌套三元表达式: a ? (b ? c : d) : e", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.number());
-      const d = variable(z.number());
-      const e = variable(z.number());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<number>();
+      const d = variable<number>();
+      const e = variable<number>();
 
       const result = expr({ a, b, c, d, e })("a ? (b ? c : d) : e");
       const compiled = compile(result, { a, b, c, d, e }, { shortCircuit: true });
@@ -146,9 +145,9 @@ describe("短路求值测试", () => {
     });
 
     test("深度嵌套三元表达式: a ? b ? c ? 1 : 2 : 3 : 4", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
 
       const result = expr({ a, b, c })("a ? b ? c ? 1 : 2 : 3 : 4");
       const compiled = compile(result, { a, b, c }, { shortCircuit: true });
@@ -162,10 +161,10 @@ describe("短路求值测试", () => {
     });
 
     test("链式逻辑或: a || b || c || d", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
-      const d = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
+      const d = variable<number>();
 
       const result = expr({ a, b, c, d })("a || b || c || d");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -179,10 +178,10 @@ describe("短路求值测试", () => {
     });
 
     test("链式逻辑与: a && b && c && d", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
-      const c = variable(z.number());
-      const d = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
+      const c = variable<number>();
+      const d = variable<number>();
 
       const result = expr({ a, b, c, d })("a && b && c && d");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -196,10 +195,10 @@ describe("短路求值测试", () => {
     });
 
     test("链式空值合并: a ?? b ?? c ?? d", () => {
-      const a = variable(z.union([z.number(), z.null()]));
-      const b = variable(z.union([z.number(), z.null()]));
-      const c = variable(z.union([z.number(), z.null()]));
-      const d = variable(z.number());
+      const a = variable<number | null>();
+      const b = variable<number | null>();
+      const c = variable<number | null>();
+      const d = variable<number>();
 
       const result = expr({ a, b, c, d })("a ?? b ?? c ?? d");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -213,10 +212,10 @@ describe("短路求值测试", () => {
     });
 
     test("混合运算符: (a || b) && (c || d)", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
 
       const result = expr({ a, b, c, d })("(a || b) && (c || d)");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -228,10 +227,10 @@ describe("短路求值测试", () => {
     });
 
     test("混合运算符: a && b || c && d", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
 
       const result = expr({ a, b, c, d })("a && b || c && d");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -244,11 +243,11 @@ describe("短路求值测试", () => {
     });
 
     test("三元表达式内嵌套逻辑运算: a ? b && c : d || e", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
-      const e = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
+      const e = variable<boolean>();
 
       const result = expr({ a, b, c, d, e })("a ? b && c : d || e");
       const compiled = compile(result, { a, b, c, d, e }, { shortCircuit: true });
@@ -265,10 +264,10 @@ describe("短路求值测试", () => {
     });
 
     test("逻辑运算作为三元条件: (a && b) ? c : d", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.number());
-      const d = variable(z.number());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<number>();
+      const d = variable<number>();
 
       const result = expr({ a, b, c, d })("(a && b) ? c : d");
       const compiled = compile(result, { a, b, c, d }, { shortCircuit: true });
@@ -280,12 +279,12 @@ describe("短路求值测试", () => {
     });
 
     test("复杂嵌套: (a || b) ? (c && d) : (e ?? f)", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
-      const e = variable(z.union([z.boolean(), z.null()]));
-      const f = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
+      const e = variable<boolean | null>();
+      const f = variable<boolean>();
 
       const result = expr({ a, b, c, d, e, f })("(a || b) ? (c && d) : (e ?? f)");
       const compiled = compile(result, { a, b, c, d, e, f }, { shortCircuit: true });
@@ -301,11 +300,11 @@ describe("短路求值测试", () => {
     });
 
     test("多层嵌套三元: a ? (b ? (c ? 1 : 2) : (d ? 3 : 4)) : (e ? 5 : 6)", () => {
-      const a = variable(z.boolean());
-      const b = variable(z.boolean());
-      const c = variable(z.boolean());
-      const d = variable(z.boolean());
-      const e = variable(z.boolean());
+      const a = variable<boolean>();
+      const b = variable<boolean>();
+      const c = variable<boolean>();
+      const d = variable<boolean>();
+      const e = variable<boolean>();
 
       const result = expr({ a, b, c, d, e })("a ? (b ? (c ? 1 : 2) : (d ? 3 : 4)) : (e ? 5 : 6)");
       const compiled = compile(result, { a, b, c, d, e }, { shortCircuit: true });
@@ -324,9 +323,9 @@ describe("短路求值测试", () => {
     });
 
     test("空值合并与逻辑或混合: (a ?? b) || c", () => {
-      const a = variable(z.union([z.number(), z.null()]));
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number | null>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const result = expr({ a, b, c })("(a ?? b) || c");
       const compiled = compile(result, { a, b, c }, { shortCircuit: true });
@@ -338,9 +337,9 @@ describe("短路求值测试", () => {
     });
 
     test("空值合并与逻辑与混合: (a ?? b) && c", () => {
-      const a = variable(z.union([z.number(), z.null()]));
-      const b = variable(z.number());
-      const c = variable(z.number());
+      const a = variable<number | null>();
+      const b = variable<number>();
+      const c = variable<number>();
 
       const result = expr({ a, b, c })("(a ?? b) && c");
       const compiled = compile(result, { a, b, c }, { shortCircuit: true });
@@ -354,8 +353,8 @@ describe("短路求值测试", () => {
 
   describe("与非短路模式对比", () => {
     test("结果应该相同", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a || b");
       const compiledV1 = compile(result, { a, b }, { shortCircuit: false });
@@ -381,8 +380,8 @@ describe("短路求值测试", () => {
 
   describe("编译输出结构验证", () => {
     test("|| 生成正确的控制流结构", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a || b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -397,8 +396,8 @@ describe("短路求值测试", () => {
     });
 
     test("&& 生成正确的控制流结构", () => {
-      const a = variable(z.number());
-      const b = variable(z.number());
+      const a = variable<number>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a && b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -411,8 +410,8 @@ describe("短路求值测试", () => {
     });
 
     test("?? 生成正确的控制流结构", () => {
-      const a = variable(z.union([z.number(), z.null()]));
-      const b = variable(z.number());
+      const a = variable<number | null>();
+      const b = variable<number>();
 
       const result = expr({ a, b })("a ?? b");
       const compiled = compile(result, { a, b }, { shortCircuit: true });
@@ -425,9 +424,9 @@ describe("短路求值测试", () => {
     });
 
     test("三元表达式生成正确的控制流结构", () => {
-      const cond = variable(z.boolean());
-      const x = variable(z.number());
-      const y = variable(z.number());
+      const cond = variable<boolean>();
+      const x = variable<number>();
+      const y = variable<number>();
 
       const result = expr({ cond, x, y })("cond ? x : y");
       const compiled = compile(result, { cond, x, y }, { shortCircuit: true });
