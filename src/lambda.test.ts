@@ -600,16 +600,14 @@ describe("嵌套 lambda", () => {
     });
   });
 
-  describe("已知限制", () => {
-    test("相同参数数量的嵌套 lambda 会发生参数名冲突", () => {
-      // 当内外层 lambda 参数数量相同时，参数名会冲突（都是 _0, _1 等）
-      // 这是当前实现的已知限制
+  describe("相同参数数量的嵌套 lambda", () => {
+    test("内外层使用相同数量参数时参数名唯一", () => {
+      // 内外层 lambda 参数数量相同时，代码生成会分配唯一参数名，不会冲突
       const matrix = variable<number[][]>();
       const processed = matrix.map(
         lambda<[number[], number], number[]>((row, rowIdx) =>
           row.map(
             lambda<[number, number], number>((val, colIdx) =>
-              // rowIdx 在编译后会变成内层的 _1 (即 colIdx)，导致结果不符预期
               expr({ val, rowIdx, colIdx })("val + rowIdx * 100 + colIdx")
             )
           )
@@ -617,9 +615,9 @@ describe("嵌套 lambda", () => {
       );
 
       const compiled = compile(processed, { matrix });
-      // 编译结果: $0.map((_0,_1)=>_0.map((_0,_1)=>_0+_1*100+_1))
-      // 内层的 _1 覆盖了外层的 _1，所以 rowIdx 实际上是 colIdx
-      expect(compiled[1]).toContain("(_0,_1)=>_0.map((_0,_1)=>");
+      // 编译结果: $0.map((_0,_1)=>_0.map((_2,_3)=>_2+_1*100+_3))
+      // 外层参数 _0, _1，内层参数 _2, _3，不会冲突
+      expect(compiled[1]).toContain("(_0,_1)=>_0.map((_2,_3)=>");
 
       const result = evaluate(compiled, {
         matrix: [
@@ -627,28 +625,24 @@ describe("嵌套 lambda", () => {
           [4, 5, 6],
         ],
       });
-      // 实际计算: val + colIdx * 100 + colIdx = val + colIdx * 101
-      // 而非预期的: val + rowIdx * 100 + colIdx
+      // 正确计算: val + rowIdx * 100 + colIdx
       expect(result).toEqual([
-        [1, 103, 205], // 1+0*101, 2+1*101, 3+2*101
-        [4, 106, 208], // 4+0*101, 5+1*101, 6+2*101
+        [1, 3, 5], // row 0: 1+0+0, 2+0+1, 3+0+2
+        [104, 106, 108], // row 1: 4+100+0, 5+100+1, 6+100+2
       ]);
     });
 
-    test("workaround: 使用不同参数数量避免冲突", () => {
-      // 解决方案：确保内外层 lambda 使用不同数量的参数
+    test("内层只用单参数捕获外层参数", () => {
       const matrix = variable<number[][]>();
       const processed = matrix.map(
         lambda<[number[], number], number[]>((row, rowIdx) =>
-          // 内层只用一个参数，外层用两个参数，避免 _1 冲突
           row.map(lambda<[number], number>((val) => expr({ val, rowIdx })("val + rowIdx * 100")))
         )
       );
 
       const compiled = compile(processed, { matrix });
-      // 编译结果: $0.map((_0,_1)=>_0.map(_0=>_0+_1*100))
-      // 内层只有 _0，外层的 _1 不会被覆盖
-      expect(compiled[1]).toContain("(_0,_1)=>_0.map(_0=>");
+      // 编译结果: $0.map((_0,_1)=>_0.map(_2=>_2+_1*100))
+      expect(compiled[1]).toContain("(_0,_1)=>_0.map(_2=>");
 
       const result = evaluate(compiled, {
         matrix: [

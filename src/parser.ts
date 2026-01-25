@@ -805,9 +805,38 @@ export function parse(source: string): ASTNode {
 }
 
 /**
+ * 代码生成上下文
+ * 用于在嵌套 lambda 中分配唯一参数名
+ */
+interface GenerateContext {
+  /** lambda 参数计数器，用于生成唯一参数名 */
+  lambdaParamCounter: number;
+  /** 占位符到实际参数名的映射 */
+  paramMapping: Map<string, string>;
+}
+
+/**
+ * 创建新的生成上下文
+ */
+function createGenerateContext(): GenerateContext {
+  return {
+    lambdaParamCounter: 0,
+    paramMapping: new Map(),
+  };
+}
+
+/**
  * 从 AST 生成规范化的代码
  */
 export function generate(node: ASTNode): string {
+  const ctx = createGenerateContext();
+  return generateWithContext(node, ctx);
+}
+
+/**
+ * 带上下文的代码生成
+ */
+function generateWithContext(node: ASTNode, ctx: GenerateContext): string {
   switch (node.type) {
     case "NumberLiteral":
       return node.raw;
@@ -822,12 +851,15 @@ export function generate(node: ASTNode): string {
     case "NullLiteral":
       return "null";
 
-    case "Identifier":
-      return node.name;
+    case "Identifier": {
+      // 检查是否是 lambda 参数占位符
+      const mappedName = ctx.paramMapping.get(node.name);
+      return mappedName ?? node.name;
+    }
 
     case "BinaryExpr": {
-      const left = wrapIfNeeded(node.left, node, "left");
-      const right = wrapIfNeeded(node.right, node, "right");
+      const left = wrapIfNeededWithContext(node.left, node, "left", ctx);
+      const right = wrapIfNeededWithContext(node.right, node, "right", ctx);
       // 关键字运算符需要空格
       if (node.operator === "in" || node.operator === "instanceof") {
         return `${left} ${node.operator} ${right}`;
@@ -837,55 +869,74 @@ export function generate(node: ASTNode): string {
 
     case "UnaryExpr":
       if (node.prefix) {
-        const arg = wrapIfNeeded(node.argument, node, "argument");
+        const arg = wrapIfNeededWithContext(node.argument, node, "argument", ctx);
         // 对于关键字运算符（typeof, void）需要空格
         if (node.operator === "typeof" || node.operator === "void") {
           return `${node.operator} ${arg}`;
         }
         return `${node.operator}${arg}`;
       }
-      return generate(node.argument) + node.operator;
+      return generateWithContext(node.argument, ctx) + node.operator;
 
     case "ConditionalExpr": {
-      const test = wrapIfNeeded(node.test, node, "test");
-      const consequent = wrapIfNeeded(node.consequent, node, "consequent");
-      const alternate = wrapIfNeeded(node.alternate, node, "alternate");
+      const test = wrapIfNeededWithContext(node.test, node, "test", ctx);
+      const consequent = wrapIfNeededWithContext(node.consequent, node, "consequent", ctx);
+      const alternate = wrapIfNeededWithContext(node.alternate, node, "alternate", ctx);
       return `${test}?${consequent}:${alternate}`;
     }
 
     case "MemberExpr": {
-      const object = wrapIfNeeded(node.object, node, "object");
-      const property = generate(node.property);
+      const object = wrapIfNeededWithContext(node.object, node, "object", ctx);
+      const property = generateWithContext(node.property, ctx);
       return node.computed
         ? `${object}${node.optional ? "?." : ""}[${property}]`
         : `${object}${node.optional ? "?." : "."}${property}`;
     }
 
     case "CallExpr": {
-      const callee = wrapIfNeeded(node.callee, node, "callee");
-      const args = node.arguments.map(generate).join(",");
+      const callee = wrapIfNeededWithContext(node.callee, node, "callee", ctx);
+      const args = node.arguments.map((arg) => generateWithContext(arg, ctx)).join(",");
       const isNew = node.callee.type === "Identifier" && BUILTIN_CONSTRUCTORS.has(node.callee.name);
       return `${isNew ? "new " : ""}${callee}${node.optional ? "?." : ""}(${args})`;
     }
 
     case "ArrayExpr":
-      return `[${node.elements.map(generate).join(",")}]`;
+      return `[${node.elements.map((el) => generateWithContext(el, ctx)).join(",")}]`;
 
     case "ObjectExpr": {
       const props = node.properties.map((prop) => {
         if (prop.shorthand) {
-          return generate(prop.key);
+          return generateWithContext(prop.key, ctx);
         }
-        const key = prop.computed ? `[${generate(prop.key)}]` : generate(prop.key);
-        return `${key}:${generate(prop.value)}`;
+        const key = prop.computed ? `[${generateWithContext(prop.key, ctx)}]` : generateWithContext(prop.key, ctx);
+        return `${key}:${generateWithContext(prop.value, ctx)}`;
       });
       return `{${props.join(",")}}`;
     }
 
     case "ArrowFunctionExpr": {
-      const params = node.params.map((p) => p.name).join(",");
-      const body = node.body.type === "ObjectExpr" ? `(${generate(node.body)})` : generate(node.body);
-      const paramsStr = node.params.length === 1 ? params : `(${params})`;
+      // 为每个参数分配唯一的参数名
+      const paramNames: string[] = [];
+      for (const param of node.params) {
+        const uniqueName = `_${ctx.lambdaParamCounter++}`;
+        paramNames.push(uniqueName);
+        // 建立占位符到实际参数名的映射
+        ctx.paramMapping.set(param.name, uniqueName);
+      }
+
+      const paramsStr = paramNames.length === 1 ? paramNames[0]! : `(${paramNames.join(",")})`;
+      const body =
+        node.body.type === "ObjectExpr"
+          ? `(${generateWithContext(node.body, ctx)})`
+          : generateWithContext(node.body, ctx);
+
+      // 清理参数映射（可选，防止污染外层作用域）
+      // 注意：由于我们使用唯一的参数名，不清理也不会冲突
+      // 但为了语义清晰，在函数体生成完成后移除映射
+      for (const param of node.params) {
+        ctx.paramMapping.delete(param.name);
+      }
+
       return `${paramsStr}=>${body}`;
     }
 
@@ -898,14 +949,15 @@ export function generate(node: ASTNode): string {
 }
 
 /**
- * 判断是否需要括号包裹，并生成代码
+ * 判断是否需要括号包裹，并生成代码（带上下文版本）
  */
-function wrapIfNeeded(
+function wrapIfNeededWithContext(
   child: ASTNode,
   parent: ASTNode,
-  position: "left" | "right" | "argument" | "object" | "callee" | "test" | "consequent" | "alternate"
+  position: "left" | "right" | "argument" | "object" | "callee" | "test" | "consequent" | "alternate",
+  ctx: GenerateContext
 ): string {
-  const code = generate(child);
+  const code = generateWithContext(child, ctx);
 
   if (needsParens(child, parent, position)) {
     return `(${code})`;

@@ -1,5 +1,5 @@
 // lambda.ts
-import { transformIdentifiers, type ASTNode } from "./parser";
+import type { ASTNode } from "./parser";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import {
   collectDepsFromArgs,
@@ -77,13 +77,11 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
   // 3. 从 bodyExpr 中提取 AST 和依赖
   const { bodyAst, bodyDeps } = extractBodyAstAndDeps(bodyExpr);
 
-  // 4. 将参数占位符标识符转换为实际参数名 (_0, _1, _2...)
-  const transformedBodyAst = transformParamPlaceholders(bodyAst, paramSymbols);
+  // 4. 构造完整的箭头函数 AST（参数名使用占位符，在代码生成时分配）
+  // 注意：不再在此处转换参数占位符，而是保持占位符到代码生成时统一分配唯一参数名
+  const arrowFunctionAst = createArrowFunctionAst(bodyAst, paramCount, paramSymbols);
 
-  // 5. 构造完整的箭头函数 AST
-  const arrowFunctionAst = createArrowFunctionAst(transformedBodyAst, paramCount);
-
-  // 6. 过滤掉 lambda 参数依赖，只保留外部闭包变量
+  // 5. 过滤掉 lambda 参数依赖，只保留外部闭包变量
   const closureDeps = filterClosureDeps(bodyDeps, paramSymbols);
 
   // 7. 返回包含 lambda AST 的 Proxy
@@ -150,30 +148,14 @@ function extractBodyAstAndDeps(bodyExpr: unknown): { bodyAst: ASTNode; bodyDeps:
 }
 
 /**
- * 将参数占位符标识符转换为实际参数名
- */
-function transformParamPlaceholders(bodyAst: ASTNode, paramSymbols: symbol[]): ASTNode {
-  return transformIdentifiers(bodyAst, (name) => {
-    for (let i = 0; i < paramSymbols.length; i++) {
-      const sym = paramSymbols[i];
-      if (!sym) continue;
-      // 占位符格式：$$VAR_lambda_param_N_INDEX$$
-      const placeholder = `$$VAR_${sym.description}$$`;
-      if (name === placeholder) {
-        return `_${i}`;
-      }
-    }
-    return name;
-  });
-}
-
-/**
  * 创建箭头函数 AST
+ * 使用占位符参数名，在代码生成时再分配实际参数名
  */
-function createArrowFunctionAst(bodyAst: ASTNode, paramCount: number): ASTNode {
+function createArrowFunctionAst(bodyAst: ASTNode, paramCount: number, paramSymbols: symbol[]): ASTNode {
   const paramIdentifiers = Array.from({ length: paramCount }, (_, i) => ({
     type: "Identifier" as const,
-    name: `_${i}`,
+    // 使用占位符，在 generate 时会被替换为唯一参数名
+    name: `$$VAR_${paramSymbols[i]?.description}$$`,
   }));
 
   return {
