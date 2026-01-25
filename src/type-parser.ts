@@ -829,8 +829,8 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
                 : Exclude<Left, null | undefined> | Right
               : unknown;
 
-/** 成员访问类型推导 */
-type InferMemberType<Obj, Prop extends string> = Prop extends keyof Obj ? Obj[Prop] : unknown;
+/** 成员访问类型推导 - 分布式处理联合类型，跳过 null/undefined */
+type InferMemberType<Obj, Prop extends string> = Prop extends keyof NonNullable<Obj> ? NonNullable<Obj>[Prop] : unknown;
 
 /** 计算属性访问类型推导 */
 type InferComputedMemberType<Obj> = Obj extends readonly (infer T)[]
