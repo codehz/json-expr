@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, expr, variable } from "./index";
+import { expr, variable } from "./index";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("集成测试：函数调用", () => {
   describe("基础函数调用", () => {
@@ -9,12 +10,14 @@ describe("集成测试：函数调用", () => {
       const x = variable<number>();
 
       const doubleCallExpr = expr({ double, x })("double(x)");
-      const doubleCompiled = compile(doubleCallExpr, { double, x });
-
-      const result = evaluate<number>(doubleCompiled, {
-        double: (n: number) => n * 2,
-        x: 5,
-      });
+      const result = compileAndEvaluate<number>(
+        doubleCallExpr,
+        { double, x },
+        {
+          double: (n: number) => n * 2,
+          x: 5,
+        }
+      );
       expect(result).toBe(10);
     });
   });
@@ -27,21 +30,28 @@ describe("集成测试：函数调用", () => {
       const b = variable<number>();
 
       const addExpr = expr({ add, a, b })("add(a, b)");
-      const addCompiled = compile(addExpr, { add, a, b });
 
-      const result = evaluate<number>(addCompiled, {
-        add: (x: number, y: number) => x + y,
-        a: 7,
-        b: 3,
-      });
+      const result = compileAndEvaluate<number>(
+        addExpr,
+        { add, a, b },
+        {
+          add: (x: number, y: number) => x + y,
+          a: 7,
+          b: 3,
+        }
+      );
       expect(result).toBe(10);
 
       // 测试另外的值
-      const result2 = evaluate<number>(addCompiled, {
-        add: (x: number, y: number) => x + y,
-        a: 100,
-        b: 50,
-      });
+      const result2 = compileAndEvaluate<number>(
+        addExpr,
+        { add, a, b },
+        {
+          add: (x: number, y: number) => x + y,
+          a: 100,
+          b: 50,
+        }
+      );
       expect(result2).toBe(150);
     });
   });
@@ -53,20 +63,24 @@ describe("集成测试：函数调用", () => {
 
       // 调用函数并访问返回对象的属性
       const userNameExpr = expr({ getUser })("getUser().name");
-      const userNameCompiled = compile(userNameExpr, { getUser });
-
-      const result = evaluate<string>(userNameCompiled, {
-        getUser: () => ({ name: "Bob", age: 28 }),
-      });
+      const result = compileAndEvaluate<string>(
+        userNameExpr,
+        { getUser },
+        {
+          getUser: () => ({ name: "Bob", age: 28 }),
+        }
+      );
       expect(result).toBe("Bob");
 
       // 访问返回对象的 age 属性
       const userAgeExpr = expr({ getUser })("getUser().age");
-      const userAgeCompiled = compile(userAgeExpr, { getUser });
-
-      const ageResult = evaluate<number>(userAgeCompiled, {
-        getUser: () => ({ name: "Bob", age: 28 }),
-      });
+      const ageResult = compileAndEvaluate<number>(
+        userAgeExpr,
+        { getUser },
+        {
+          getUser: () => ({ name: "Bob", age: 28 }),
+        }
+      );
       expect(ageResult).toBe(28);
     });
   });

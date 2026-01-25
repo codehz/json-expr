@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, expr, variable } from "./index";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("集成测试：Math 数学函数", () => {
   describe("基本函数", () => {
@@ -8,20 +9,17 @@ describe("集成测试：Math 数学函数", () => {
 
       // Math.abs - 绝对值
       const absExpr = expr({ x })("Math.abs(x)");
-      const absCompiled = compile(absExpr, { x });
-      expect(evaluate<number>(absCompiled, { x: -5 })).toBe(5);
-      expect(evaluate<number>(absCompiled, { x: 5 })).toBe(5);
+      expect(compileAndEvaluate<number>(absExpr, { x }, { x: -5 })).toBe(5);
+      expect(compileAndEvaluate<number>(absExpr, { x }, { x: 5 })).toBe(5);
 
       // Math.sqrt - 平方根
       const sqrtExpr = expr({ x })("Math.sqrt(x)");
-      const sqrtCompiled = compile(sqrtExpr, { x });
-      expect(evaluate<number>(sqrtCompiled, { x: 16 })).toBe(4);
-      expect(evaluate<number>(sqrtCompiled, { x: 2 })).toBeCloseTo(Math.SQRT2);
+      expect(compileAndEvaluate<number>(sqrtExpr, { x }, { x: 16 })).toBe(4);
+      expect(compileAndEvaluate<number>(sqrtExpr, { x }, { x: 2 })).toBeCloseTo(Math.SQRT2);
 
       // Math.cbrt - 立方根
       const cbrtExpr = expr({ x })("Math.cbrt(x)");
-      const cbrtCompiled = compile(cbrtExpr, { x });
-      expect(evaluate<number>(cbrtCompiled, { x: 27 })).toBe(3);
+      expect(compileAndEvaluate<number>(cbrtExpr, { x }, { x: 27 })).toBe(3);
     });
   });
 
@@ -31,21 +29,18 @@ describe("集成测试：Math 数学函数", () => {
 
       // Math.sin
       const sinExpr = expr({ angle })("Math.sin(angle)");
-      const sinCompiled = compile(sinExpr, { angle });
-      expect(evaluate<number>(sinCompiled, { angle: 0 })).toBe(0);
-      expect(evaluate<number>(sinCompiled, { angle: Math.PI / 2 })).toBeCloseTo(1);
+      expect(compileAndEvaluate<number>(sinExpr, { angle }, { angle: 0 })).toBe(0);
+      expect(compileAndEvaluate<number>(sinExpr, { angle }, { angle: Math.PI / 2 })).toBeCloseTo(1);
 
       // Math.cos
       const cosExpr = expr({ angle })("Math.cos(angle)");
-      const cosCompiled = compile(cosExpr, { angle });
-      expect(evaluate<number>(cosCompiled, { angle: 0 })).toBe(1);
-      expect(evaluate<number>(cosCompiled, { angle: Math.PI })).toBeCloseTo(-1);
+      expect(compileAndEvaluate<number>(cosExpr, { angle }, { angle: 0 })).toBe(1);
+      expect(compileAndEvaluate<number>(cosExpr, { angle }, { angle: Math.PI })).toBeCloseTo(-1);
 
       // Math.tan
       const tanExpr = expr({ angle })("Math.tan(angle)");
-      const tanCompiled = compile(tanExpr, { angle });
-      expect(evaluate<number>(tanCompiled, { angle: 0 })).toBe(0);
-      expect(evaluate<number>(tanCompiled, { angle: Math.PI / 4 })).toBeCloseTo(1);
+      expect(compileAndEvaluate<number>(tanExpr, { angle }, { angle: 0 })).toBe(0);
+      expect(compileAndEvaluate<number>(tanExpr, { angle }, { angle: Math.PI / 4 })).toBeCloseTo(1);
     });
   });
 
@@ -56,27 +51,23 @@ describe("集成测试：Math 数学函数", () => {
 
       // Math.pow - 幂运算
       const powExpr = expr({ x, y })("Math.pow(x, y)");
-      const powCompiled = compile(powExpr, { x, y });
-      expect(evaluate<number>(powCompiled, { x: 2, y: 3 })).toBe(8);
-      expect(evaluate<number>(powCompiled, { x: 3, y: 2 })).toBe(9);
+      expect(compileAndEvaluate<number>(powExpr, { x, y }, { x: 2, y: 3 })).toBe(8);
+      expect(compileAndEvaluate<number>(powExpr, { x, y }, { x: 3, y: 2 })).toBe(9);
 
       // Math.exp - e 的幂
       const expExpr = expr({ x })("Math.exp(x)");
-      const expCompiled = compile(expExpr, { x });
-      expect(evaluate<number>(expCompiled, { x: 0 })).toBe(1);
-      expect(evaluate<number>(expCompiled, { x: 1 })).toBeCloseTo(Math.E);
+      expect(compileAndEvaluate<number>(expExpr, { x }, { x: 0 })).toBe(1);
+      expect(compileAndEvaluate<number>(expExpr, { x }, { x: 1 })).toBeCloseTo(Math.E);
 
       // Math.log - 自然对数
       const logExpr = expr({ x })("Math.log(x)");
-      const logCompiled = compile(logExpr, { x });
-      expect(evaluate<number>(logCompiled, { x: 1 })).toBe(0);
-      expect(evaluate<number>(logCompiled, { x: Math.E })).toBeCloseTo(1);
+      expect(compileAndEvaluate<number>(logExpr, { x }, { x: 1 })).toBe(0);
+      expect(compileAndEvaluate<number>(logExpr, { x }, { x: Math.E })).toBeCloseTo(1);
 
       // Math.log10 - 以 10 为底的对数
       const log10Expr = expr({ x })("Math.log10(x)");
-      const log10Compiled = compile(log10Expr, { x });
-      expect(evaluate<number>(log10Compiled, { x: 100 })).toBe(2);
-      expect(evaluate<number>(log10Compiled, { x: 1000 })).toBe(3);
+      expect(compileAndEvaluate<number>(log10Expr, { x }, { x: 100 })).toBe(2);
+      expect(compileAndEvaluate<number>(log10Expr, { x }, { x: 1000 })).toBe(3);
     });
   });
 
@@ -86,27 +77,23 @@ describe("集成测试：Math 数学函数", () => {
 
       // Math.floor - 向下取整
       const floorExpr = expr({ x })("Math.floor(x)");
-      const floorCompiled = compile(floorExpr, { x });
-      expect(evaluate<number>(floorCompiled, { x: 4.7 })).toBe(4);
-      expect(evaluate<number>(floorCompiled, { x: -4.3 })).toBe(-5);
+      expect(compileAndEvaluate<number>(floorExpr, { x }, { x: 4.7 })).toBe(4);
+      expect(compileAndEvaluate<number>(floorExpr, { x }, { x: -4.3 })).toBe(-5);
 
       // Math.ceil - 向上取整
       const ceilExpr = expr({ x })("Math.ceil(x)");
-      const ceilCompiled = compile(ceilExpr, { x });
-      expect(evaluate<number>(ceilCompiled, { x: 4.3 })).toBe(5);
-      expect(evaluate<number>(ceilCompiled, { x: -4.7 })).toBe(-4);
+      expect(compileAndEvaluate<number>(ceilExpr, { x }, { x: 4.3 })).toBe(5);
+      expect(compileAndEvaluate<number>(ceilExpr, { x }, { x: -4.7 })).toBe(-4);
 
       // Math.round - 四舍五入
       const roundExpr = expr({ x })("Math.round(x)");
-      const roundCompiled = compile(roundExpr, { x });
-      expect(evaluate<number>(roundCompiled, { x: 4.5 })).toBe(5);
-      expect(evaluate<number>(roundCompiled, { x: 4.4 })).toBe(4);
+      expect(compileAndEvaluate<number>(roundExpr, { x }, { x: 4.5 })).toBe(5);
+      expect(compileAndEvaluate<number>(roundExpr, { x }, { x: 4.4 })).toBe(4);
 
       // Math.trunc - 截断小数部分
       const truncExpr = expr({ x })("Math.trunc(x)");
-      const truncCompiled = compile(truncExpr, { x });
-      expect(evaluate<number>(truncCompiled, { x: 4.7 })).toBe(4);
-      expect(evaluate<number>(truncCompiled, { x: -4.7 })).toBe(-4);
+      expect(compileAndEvaluate<number>(truncExpr, { x }, { x: 4.7 })).toBe(4);
+      expect(compileAndEvaluate<number>(truncExpr, { x }, { x: -4.7 })).toBe(-4);
     });
   });
 
@@ -118,24 +105,20 @@ describe("集成测试：Math 数学函数", () => {
 
       // Math.min
       const minExpr = expr({ x, y })("Math.min(x, y)");
-      const minCompiled = compile(minExpr, { x, y });
-      expect(evaluate<number>(minCompiled, { x: 3, y: 7 })).toBe(3);
-      expect(evaluate<number>(minCompiled, { x: -2, y: 5 })).toBe(-2);
+      expect(compileAndEvaluate<number>(minExpr, { x, y }, { x: 3, y: 7 })).toBe(3);
+      expect(compileAndEvaluate<number>(minExpr, { x, y }, { x: -2, y: 5 })).toBe(-2);
 
       // Math.max
       const maxExpr = expr({ x, y })("Math.max(x, y)");
-      const maxCompiled = compile(maxExpr, { x, y });
-      expect(evaluate<number>(maxCompiled, { x: 3, y: 7 })).toBe(7);
-      expect(evaluate<number>(maxCompiled, { x: -2, y: 5 })).toBe(5);
+      expect(compileAndEvaluate<number>(maxExpr, { x, y }, { x: 3, y: 7 })).toBe(7);
+      expect(compileAndEvaluate<number>(maxExpr, { x, y }, { x: -2, y: 5 })).toBe(5);
 
       // Math.min/max with multiple arguments
       const min3Expr = expr({ x, y, zVar })("Math.min(x, y, zVar)");
-      const min3Compiled = compile(min3Expr, { x, y, zVar });
-      expect(evaluate<number>(min3Compiled, { x: 5, y: 2, zVar: 8 })).toBe(2);
+      expect(compileAndEvaluate<number>(min3Expr, { x, y, zVar }, { x: 5, y: 2, zVar: 8 })).toBe(2);
 
       const max3Expr = expr({ x, y, zVar })("Math.max(x, y, zVar)");
-      const max3Compiled = compile(max3Expr, { x, y, zVar });
-      expect(evaluate<number>(max3Compiled, { x: 5, y: 2, zVar: 8 })).toBe(8);
+      expect(compileAndEvaluate<number>(max3Expr, { x, y, zVar }, { x: 5, y: 2, zVar: 8 })).toBe(8);
     });
   });
 
@@ -146,18 +129,15 @@ describe("集成测试：Math 数学函数", () => {
 
       // 计算两点距离: sqrt(x^2 + y^2)
       const distance = expr({ x, y })("Math.sqrt(x * x + y * y)");
-      const distCompiled = compile(distance, { x, y });
-      expect(evaluate<number>(distCompiled, { x: 3, y: 4 })).toBe(5); // 3-4-5 三角形
+      expect(compileAndEvaluate<number>(distance, { x, y }, { x: 3, y: 4 })).toBe(5); // 3-4-5 三角形
 
       // 使用 Math.hypot 简化
       const hypotExpr = expr({ x, y })("Math.hypot(x, y)");
-      const hypotCompiled = compile(hypotExpr, { x, y });
-      expect(evaluate<number>(hypotCompiled, { x: 3, y: 4 })).toBe(5);
+      expect(compileAndEvaluate<number>(hypotExpr, { x, y }, { x: 3, y: 4 })).toBe(5);
 
       // 复合表达式: abs(sin(x)) + log(1 + y)
       const complexMath = expr({ x, y })("Math.abs(Math.sin(x)) + Math.log(1 + y)");
-      const complexCompiled = compile(complexMath, { x, y });
-      const result = evaluate<number>(complexCompiled, { x: Math.PI, y: Math.E - 1 });
+      const result = compileAndEvaluate<number>(complexMath, { x, y }, { x: Math.PI, y: Math.E - 1 });
       // sin(PI) ≈ 0, log(E) = 1
       expect(result).toBeCloseTo(1);
     });
@@ -199,18 +179,15 @@ describe("集成测试：Math 数学函数", () => {
 
       // 使用 Math.PI
       const circumference = expr({ x })("2 * Math.PI * x"); // 周长 = 2πr
-      const circCompiled = compile(circumference, { x });
-      expect(evaluate<number>(circCompiled, { x: 1 })).toBeCloseTo(2 * Math.PI);
+      expect(compileAndEvaluate<number>(circumference, { x }, { x: 1 })).toBeCloseTo(2 * Math.PI);
 
       // 使用 Math.E
       const expGrowth = expr({ x })("Math.E ** x"); // e^x
-      const expCompiled = compile(expGrowth, { x });
-      expect(evaluate<number>(expCompiled, { x: 2 })).toBeCloseTo(Math.E ** 2);
+      expect(compileAndEvaluate<number>(expGrowth, { x }, { x: 2 })).toBeCloseTo(Math.E ** 2);
 
       // 使用 Math.SQRT2
-      const diagonal = expr({ x })("x * Math.SQRT2"); // 正方形对角线
-      const diagCompiled = compile(diagonal, { x });
-      expect(evaluate<number>(diagCompiled, { x: 1 })).toBeCloseTo(Math.SQRT2);
+      const diagonal = expr({ x })("x * Math.SQRT2"); // 正方体对角线
+      expect(compileAndEvaluate<number>(diagonal, { x }, { x: 1 })).toBeCloseTo(Math.SQRT2);
     });
   });
 });

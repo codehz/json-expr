@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, expr, variable } from "./index";
+import { expr, variable } from "./index";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("集成测试：对象属性访问", () => {
   describe("基础对象属性访问", () => {
@@ -14,18 +15,21 @@ describe("集成测试：对象属性访问", () => {
 
       // 访问 name 属性
       const nameExpr = expr({ obj })("obj.name");
-      const nameCompiled = compile(nameExpr, { obj });
-      expect(evaluate<string>(nameCompiled, { obj: { name: "test", value: 42, enabled: true } })).toBe("test");
+      expect(compileAndEvaluate<string>(nameExpr, { obj }, { obj: { name: "test", value: 42, enabled: true } })).toBe(
+        "test"
+      );
 
       // 访问 value 属性
       const valueExpr = expr({ obj })("obj.value");
-      const valueCompiled = compile(valueExpr, { obj });
-      expect(evaluate<number>(valueCompiled, { obj: { name: "test", value: 42, enabled: true } })).toBe(42);
+      expect(compileAndEvaluate<number>(valueExpr, { obj }, { obj: { name: "test", value: 42, enabled: true } })).toBe(
+        42
+      );
 
       // 访问 enabled 属性
       const enabledExpr = expr({ obj })("obj.enabled");
-      const enabledCompiled = compile(enabledExpr, { obj });
-      expect(evaluate<boolean>(enabledCompiled, { obj: { name: "test", value: 42, enabled: true } })).toBe(true);
+      expect(
+        compileAndEvaluate<boolean>(enabledExpr, { obj }, { obj: { name: "test", value: 42, enabled: true } })
+      ).toBe(true);
     });
   });
 
@@ -39,18 +43,15 @@ describe("集成测试：对象属性访问", () => {
 
       // 简单乘法
       const doubleExpr = expr({ obj })("obj.value * 2");
-      const doubleCompiled = compile(doubleExpr, { obj });
-      expect(evaluate<number>(doubleCompiled, { obj: { value: 10, multiplier: 3 } })).toBe(20);
+      expect(compileAndEvaluate<number>(doubleExpr, { obj }, { obj: { value: 10, multiplier: 3 } })).toBe(20);
 
       // 使用对象内两个属性
       const productExpr = expr({ obj })("obj.value * obj.multiplier");
-      const productCompiled = compile(productExpr, { obj });
-      expect(evaluate<number>(productCompiled, { obj: { value: 10, multiplier: 3 } })).toBe(30);
+      expect(compileAndEvaluate<number>(productExpr, { obj }, { obj: { value: 10, multiplier: 3 } })).toBe(30);
 
       // 复杂表达式
       const complexExpr = expr({ obj })("obj.value * obj.multiplier + obj.value");
-      const complexCompiled = compile(complexExpr, { obj });
-      expect(evaluate<number>(complexCompiled, { obj: { value: 10, multiplier: 3 } })).toBe(40); // 10*3 + 10 = 40
+      expect(compileAndEvaluate<number>(complexExpr, { obj }, { obj: { value: 10, multiplier: 3 } })).toBe(40); // 10*3 + 10 = 40
     });
   });
 
@@ -69,38 +70,47 @@ describe("集成测试：对象属性访问", () => {
 
       // 访问嵌套的 user.name
       const userNameExpr = expr({ profile })("profile.user.name");
-      const userNameCompiled = compile(userNameExpr, { profile });
       expect(
-        evaluate<string>(userNameCompiled, {
-          profile: {
-            user: { name: "Alice", age: 30 },
-            settings: { theme: "dark" },
-          },
-        })
+        compileAndEvaluate<string>(
+          userNameExpr,
+          { profile },
+          {
+            profile: {
+              user: { name: "Alice", age: 30 },
+              settings: { theme: "dark" },
+            },
+          }
+        )
       ).toBe("Alice");
 
       // 访问嵌套的 user.age
       const userAgeExpr = expr({ profile })("profile.user.age");
-      const userAgeCompiled = compile(userAgeExpr, { profile });
       expect(
-        evaluate<number>(userAgeCompiled, {
-          profile: {
-            user: { name: "Alice", age: 30 },
-            settings: { theme: "dark" },
-          },
-        })
+        compileAndEvaluate<number>(
+          userAgeExpr,
+          { profile },
+          {
+            profile: {
+              user: { name: "Alice", age: 30 },
+              settings: { theme: "dark" },
+            },
+          }
+        )
       ).toBe(30);
 
       // 访问嵌套的 settings.theme
       const themeExpr = expr({ profile })("profile.settings.theme");
-      const themeCompiled = compile(themeExpr, { profile });
       expect(
-        evaluate<string>(themeCompiled, {
-          profile: {
-            user: { name: "Alice", age: 30 },
-            settings: { theme: "dark" },
-          },
-        })
+        compileAndEvaluate<string>(
+          themeExpr,
+          { profile },
+          {
+            profile: {
+              user: { name: "Alice", age: 30 },
+              settings: { theme: "dark" },
+            },
+          }
+        )
       ).toBe("dark");
     });
   });
@@ -121,7 +131,6 @@ describe("集成测试：对象属性访问", () => {
 
       // 访问深层 value 属性
       const deepValueExpr = expr({ config })("config.level1.level2.level3.value");
-      const deepValueCompiled = compile(deepValueExpr, { config });
       const testData = {
         config: {
           level1: {
@@ -134,17 +143,15 @@ describe("集成测试：对象属性访问", () => {
           },
         },
       };
-      expect(evaluate<number>(deepValueCompiled, testData)).toBe(999);
+      expect(compileAndEvaluate<number>(deepValueExpr, { config }, testData)).toBe(999);
 
       // 访问深层 label 属性
       const deepLabelExpr = expr({ config })("config.level1.level2.level3.label");
-      const deepLabelCompiled = compile(deepLabelExpr, { config });
-      expect(evaluate<string>(deepLabelCompiled, testData)).toBe("deep");
+      expect(compileAndEvaluate<string>(deepLabelExpr, { config }, testData)).toBe("deep");
 
       // 在表达式中使用深层属性
       const deepCalcExpr = expr({ config })("config.level1.level2.level3.value * 2");
-      const deepCalcCompiled = compile(deepCalcExpr, { config });
-      expect(evaluate<number>(deepCalcCompiled, testData)).toBe(1998);
+      expect(compileAndEvaluate<number>(deepCalcExpr, { config }, testData)).toBe(1998);
     });
   });
 
@@ -158,7 +165,6 @@ describe("集成测试：对象属性访问", () => {
 
       // 调用对象方法
       const sumExpr = expr({ obj })("obj.sum()");
-      const sumCompiled = compile(sumExpr, { obj });
 
       const testObj = {
         numbers: [1, 2, 3, 4, 5],
@@ -167,7 +173,7 @@ describe("集成测试：对象属性访问", () => {
         },
       };
 
-      expect(evaluate<number>(sumCompiled, { obj: testObj })).toBe(15);
+      expect(compileAndEvaluate<number>(sumExpr, { obj }, { obj: testObj })).toBe(15);
     });
   });
 
@@ -183,15 +189,10 @@ describe("集成测试：对象属性访问", () => {
 
       // 获取最大值
       const maxExpr = expr({ stats })("stats.getMax()");
-      const maxCompiled = compile(maxExpr, { stats });
-
       // 获取最小值
       const minExpr = expr({ stats })("stats.getMin()");
-      const minCompiled = compile(minExpr, { stats });
-
       // 获取平均值
       const avgExpr = expr({ stats })("stats.getAverage()");
-      const avgCompiled = compile(avgExpr, { stats });
 
       const testData = {
         numbers: [10, 20, 30, 40, 50],
@@ -206,9 +207,9 @@ describe("集成测试：对象属性访问", () => {
         },
       };
 
-      expect(evaluate<number>(maxCompiled, { stats: testData })).toBe(50);
-      expect(evaluate<number>(minCompiled, { stats: testData })).toBe(10);
-      expect(evaluate<number>(avgCompiled, { stats: testData })).toBe(30);
+      expect(compileAndEvaluate<number>(maxExpr, { stats }, { stats: testData })).toBe(50);
+      expect(compileAndEvaluate<number>(minExpr, { stats }, { stats: testData })).toBe(10);
+      expect(compileAndEvaluate<number>(avgExpr, { stats }, { stats: testData })).toBe(30);
     });
   });
 });

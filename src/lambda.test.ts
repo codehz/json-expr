@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, expr, lambda, variable } from "./index";
+import { compile, compileAndEvaluate, evaluate, expr, lambda, variable } from "./index";
 
 describe("lambda 函数", () => {
   describe("基础功能", () => {
@@ -34,9 +34,9 @@ describe("lambda 函数", () => {
       const items = variable<{ value: number }[]>();
       const values = items.map(lambda<[{ value: number }], number>((item) => item.value));
 
-      const compiled = compile(values, { items });
-      const result = evaluate(compiled, { items: [{ value: 1 }, { value: 2 }, { value: 3 }] });
-      expect(result).toEqual([1, 2, 3]);
+      expect(compileAndEvaluate(values, { items }, { items: [{ value: 1 }, { value: 2 }, { value: 3 }] })).toEqual([
+        1, 2, 3,
+      ]);
     });
   });
 
@@ -78,9 +78,9 @@ describe("lambda 函数", () => {
 
       const filtered = numbers.filter(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")));
 
-      const compiled = compile(filtered, { numbers, threshold });
-      const result = evaluate(compiled, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 });
-      expect(result).toEqual([5, 8, 7]);
+      expect(
+        compileAndEvaluate(filtered, { numbers, threshold }, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 })
+      ).toEqual([5, 8, 7]);
     });
 
     test("find", () => {
@@ -91,34 +91,36 @@ describe("lambda 函数", () => {
         lambda<[{ id: number; name: string }], boolean>((item) => expr({ item, targetId })("item.id === targetId"))
       );
 
-      const compiled = compile(found, { items, targetId });
-      const result = evaluate(compiled, {
-        items: [
-          { id: 1, name: "a" },
-          { id: 2, name: "b" },
-          { id: 3, name: "c" },
-        ],
-        targetId: 2,
-      });
-      expect(result).toEqual({ id: 2, name: "b" });
+      expect(
+        compileAndEvaluate(
+          found,
+          { items, targetId },
+          {
+            items: [
+              { id: 1, name: "a" },
+              { id: 2, name: "b" },
+              { id: 3, name: "c" },
+            ],
+            targetId: 2,
+          }
+        )
+      ).toEqual({ id: 2, name: "b" });
     });
 
     test("some", () => {
       const numbers = variable<number[]>();
       const hasPositive = numbers.some(lambda<[number], boolean>((n) => expr({ n })("n > 0")));
 
-      const compiled = compile(hasPositive, { numbers });
-      expect(evaluate<boolean>(compiled, { numbers: [-1, -2, 3] })).toBe(true);
-      expect(evaluate<boolean>(compiled, { numbers: [-1, -2, -3] })).toBe(false);
+      expect(compileAndEvaluate<boolean>(hasPositive, { numbers }, { numbers: [-1, -2, 3] })).toBe(true);
+      expect(compileAndEvaluate<boolean>(hasPositive, { numbers }, { numbers: [-1, -2, -3] })).toBe(false);
     });
 
     test("every", () => {
       const numbers = variable<number[]>();
       const allPositive = numbers.every(lambda<[number], boolean>((n) => expr({ n })("n > 0")));
 
-      const compiled = compile(allPositive, { numbers });
-      expect(evaluate<boolean>(compiled, { numbers: [1, 2, 3] })).toBe(true);
-      expect(evaluate<boolean>(compiled, { numbers: [1, -2, 3] })).toBe(false);
+      expect(compileAndEvaluate<boolean>(allPositive, { numbers }, { numbers: [1, 2, 3] })).toBe(true);
+      expect(compileAndEvaluate<boolean>(allPositive, { numbers }, { numbers: [1, -2, 3] })).toBe(false);
     });
 
     test("sort", () => {
@@ -126,9 +128,9 @@ describe("lambda 函数", () => {
 
       const sorted = numbers.toSorted(lambda<[number, number], number>((a, b) => expr({ a, b })("a - b")));
 
-      const compiled = compile(sorted, { numbers });
-      const result = evaluate(compiled, { numbers: [3, 1, 4, 1, 5, 9, 2, 6] });
-      expect(result).toEqual([1, 1, 2, 3, 4, 5, 6, 9]);
+      expect(compileAndEvaluate(sorted, { numbers }, { numbers: [3, 1, 4, 1, 5, 9, 2, 6] })).toEqual([
+        1, 1, 2, 3, 4, 5, 6, 9,
+      ]);
     });
   });
 
@@ -140,9 +142,7 @@ describe("lambda 函数", () => {
         lambda<[string, number], { item: string; index: number }>((item, index) => ({ item, index }))
       );
 
-      const compiled = compile(indexed, { items });
-      const result = evaluate(compiled, { items: ["a", "b", "c"] });
-      expect(result).toEqual([
+      expect(compileAndEvaluate(indexed, { items }, { items: ["a", "b", "c"] })).toEqual([
         { item: "a", index: 0 },
         { item: "b", index: 1 },
         { item: "c", index: 2 },
@@ -191,9 +191,9 @@ describe("lambda 函数", () => {
         .filter(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")))
         .map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 
-      const compiled = compile(result, { numbers, threshold });
-      const evaluated = evaluate(compiled, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 });
-      expect(evaluated).toEqual([10, 16, 14]); // [5, 8, 7] * 2
+      expect(compileAndEvaluate(result, { numbers, threshold }, { numbers: [1, 5, 3, 8, 2, 7], threshold: 4 })).toEqual(
+        [10, 16, 14]
+      ); // [5, 8, 7] * 2
     });
   });
 
@@ -217,27 +217,21 @@ describe("lambda 函数", () => {
       const numbers = variable<number[]>();
       const mapped = numbers.map(lambda<[number], number>(() => 42));
 
-      const compiled = compile(mapped, { numbers });
-      const result = evaluate(compiled, { numbers: [1, 2, 3] });
-      expect(result).toEqual([42, 42, 42]);
+      expect(compileAndEvaluate(mapped, { numbers }, { numbers: [1, 2, 3] })).toEqual([42, 42, 42]);
     });
 
     test("返回字符串常量", () => {
       const items = variable<string[]>();
       const mapped = items.map(lambda<[string], string>(() => "constant"));
 
-      const compiled = compile(mapped, { items });
-      const result = evaluate(compiled, { items: ["a", "b"] });
-      expect(result).toEqual(["constant", "constant"]);
+      expect(compileAndEvaluate(mapped, { items }, { items: ["a", "b"] })).toEqual(["constant", "constant"]);
     });
 
     test("返回包含混合值的数组", () => {
       const numbers = variable<number[]>();
       const pairs = numbers.map(lambda<[number], [number, string]>((n) => [n, "item"]));
 
-      const compiled = compile(pairs, { numbers });
-      const result = evaluate(compiled, { numbers: [1, 2, 3] });
-      expect(result).toEqual([
+      expect(compileAndEvaluate(pairs, { numbers }, { numbers: [1, 2, 3] })).toEqual([
         [1, "item"],
         [2, "item"],
         [3, "item"],
@@ -251,9 +245,7 @@ describe("lambda 函数", () => {
         lambda<[string], { value: string; tag: string }>((item) => ({ value: item, tag: prefix }))
       );
 
-      const compiled = compile(tagged, { items, prefix });
-      const result = evaluate(compiled, { items: ["a", "b"], prefix: "test" });
-      expect(result).toEqual([
+      expect(compileAndEvaluate(tagged, { items, prefix }, { items: ["a", "b"], prefix: "test" })).toEqual([
         { value: "a", tag: "test" },
         { value: "b", tag: "test" },
       ]);
@@ -278,14 +270,18 @@ describe("嵌套 lambda", () => {
         lambda<[number[]], number[]>((row) => row.map(lambda<[number], number>((n) => expr({ n })("n * 2"))))
       );
 
-      const compiled = compile(doubled, { matrix });
-      const result = evaluate(compiled, {
-        matrix: [
-          [1, 2],
-          [3, 4],
-        ],
-      });
-      expect(result).toEqual([
+      expect(
+        compileAndEvaluate(
+          doubled,
+          { matrix },
+          {
+            matrix: [
+              [1, 2],
+              [3, 4],
+            ],
+          }
+        )
+      ).toEqual([
         [2, 4],
         [6, 8],
       ]);
@@ -297,14 +293,18 @@ describe("嵌套 lambda", () => {
         lambda<[number[]], number[]>((row) => row.filter(lambda<[number], boolean>((n) => expr({ n })("n > 2"))))
       );
 
-      const compiled = compile(filtered, { matrix });
-      const result = evaluate(compiled, {
-        matrix: [
-          [1, 2, 3],
-          [4, 5, 6],
-        ],
-      });
-      expect(result).toEqual([[3], [4, 5, 6]]);
+      expect(
+        compileAndEvaluate(
+          filtered,
+          { matrix },
+          {
+            matrix: [
+              [1, 2, 3],
+              [4, 5, 6],
+            ],
+          }
+        )
+      ).toEqual([[3], [4, 5, 6]]);
     });
 
     test("外层 map 内层 reduce", () => {
@@ -318,14 +318,18 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(sums, { matrix });
-      const result = evaluate(compiled, {
-        matrix: [
-          [1, 2, 3],
-          [4, 5, 6],
-        ],
-      });
-      expect(result).toEqual([6, 15]);
+      expect(
+        compileAndEvaluate(
+          sums,
+          { matrix },
+          {
+            matrix: [
+              [1, 2, 3],
+              [4, 5, 6],
+            ],
+          }
+        )
+      ).toEqual([6, 15]);
     });
   });
 
@@ -364,14 +368,18 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(indexed, { matrix });
-      const result = evaluate(compiled, {
-        matrix: [
-          [1, 2],
-          [3, 4],
-        ],
-      });
-      expect(result).toEqual([
+      expect(
+        compileAndEvaluate(
+          indexed,
+          { matrix },
+          {
+            matrix: [
+              [1, 2],
+              [3, 4],
+            ],
+          }
+        )
+      ).toEqual([
         [1, 2], // rowIndex=0: 1+0, 2+0
         [13, 14], // rowIndex=1: 3+10, 4+10
       ]);
@@ -416,17 +424,21 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(processed, { cube, multiplier });
-      const result = evaluate(compiled, {
-        cube: [
-          [
-            [1, 2],
-            [3, 4],
-          ],
-        ],
-        multiplier: 2,
-      });
-      expect(result).toEqual([
+      expect(
+        compileAndEvaluate(
+          processed,
+          { cube, multiplier },
+          {
+            cube: [
+              [
+                [1, 2],
+                [3, 4],
+              ],
+            ],
+            multiplier: 2,
+          }
+        )
+      ).toEqual([
         [
           [2, 4],
           [6, 8],
@@ -470,14 +482,18 @@ describe("嵌套 lambda", () => {
         }))
       );
 
-      const compiled = compile(totals, { groups });
-      const result = evaluate(compiled, {
-        groups: [
-          { name: "A", values: [1, 2, 3] },
-          { name: "B", values: [4, 5, 6] },
-        ],
-      });
-      expect(result).toEqual([
+      expect(
+        compileAndEvaluate(
+          totals,
+          { groups },
+          {
+            groups: [
+              { name: "A", values: [1, 2, 3] },
+              { name: "B", values: [4, 5, 6] },
+            ],
+          }
+        )
+      ).toEqual([
         { name: "A", total: 6 },
         { name: "B", total: 15 },
       ]);
@@ -520,15 +536,19 @@ describe("嵌套 lambda", () => {
         [] as number[]
       );
 
-      const compiled = compile(flattened, { groups, offset });
-      const result = evaluate(compiled, {
-        groups: [
-          [1, 2],
-          [3, 4],
-        ],
-        offset: 10,
-      });
-      expect(result).toEqual([11, 12, 13, 14]);
+      expect(
+        compileAndEvaluate(
+          flattened,
+          { groups, offset },
+          {
+            groups: [
+              [1, 2],
+              [3, 4],
+            ],
+            offset: 10,
+          }
+        )
+      ).toEqual([11, 12, 13, 14]);
     });
 
     test("嵌套 some/every", () => {
@@ -542,24 +562,31 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(allRowsHaveLarge, { matrix, threshold });
       expect(
-        evaluate<boolean>(compiled, {
-          matrix: [
-            [1, 5, 2],
-            [3, 8, 1],
-          ],
-          threshold: 4,
-        })
+        compileAndEvaluate<boolean>(
+          allRowsHaveLarge,
+          { matrix, threshold },
+          {
+            matrix: [
+              [1, 5, 2],
+              [3, 8, 1],
+            ],
+            threshold: 4,
+          }
+        )
       ).toBe(true);
       expect(
-        evaluate<boolean>(compiled, {
-          matrix: [
-            [1, 2, 3],
-            [4, 5, 6],
-          ],
-          threshold: 10,
-        })
+        compileAndEvaluate<boolean>(
+          allRowsHaveLarge,
+          { matrix, threshold },
+          {
+            matrix: [
+              [1, 2, 3],
+              [4, 5, 6],
+            ],
+            threshold: 10,
+          }
+        )
       ).toBe(false);
     });
 
@@ -574,26 +601,30 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(firstActiveChild, { data });
-      const result = evaluate(compiled, {
-        data: [
+      expect(
+        compileAndEvaluate(
+          firstActiveChild,
+          { data },
           {
-            id: 1,
-            children: [
-              { name: "a", active: false },
-              { name: "b", active: true },
+            data: [
+              {
+                id: 1,
+                children: [
+                  { name: "a", active: false },
+                  { name: "b", active: true },
+                ],
+              },
+              {
+                id: 2,
+                children: [
+                  { name: "c", active: true },
+                  { name: "d", active: false },
+                ],
+              },
             ],
-          },
-          {
-            id: 2,
-            children: [
-              { name: "c", active: true },
-              { name: "d", active: false },
-            ],
-          },
-        ],
-      });
-      expect(result).toEqual([
+          }
+        )
+      ).toEqual([
         { name: "b", active: true },
         { name: "c", active: true },
       ]);
@@ -614,19 +645,18 @@ describe("嵌套 lambda", () => {
         )
       );
 
-      const compiled = compile(processed, { matrix });
-      // 编译结果: $0.map((_0,_1)=>_0.map((_2,_3)=>_2+_1*100+_3))
-      // 外层参数 _0, _1，内层参数 _2, _3，不会冲突
-      expect(compiled[1]).toContain("(_0,_1)=>_0.map((_2,_3)=>");
-
-      const result = evaluate(compiled, {
-        matrix: [
-          [1, 2, 3],
-          [4, 5, 6],
-        ],
-      });
-      // 正确计算: val + rowIdx * 100 + colIdx
-      expect(result).toEqual([
+      expect(
+        compileAndEvaluate(
+          processed,
+          { matrix },
+          {
+            matrix: [
+              [1, 2, 3],
+              [4, 5, 6],
+            ],
+          }
+        )
+      ).toEqual([
         [1, 3, 5], // row 0: 1+0+0, 2+0+1, 3+0+2
         [104, 106, 108], // row 1: 4+100+0, 5+100+1, 6+100+2
       ]);

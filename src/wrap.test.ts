@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compile, evaluate, expr, lambda, variable, wrap } from "./index";
+import { compileAndEvaluate, expr, lambda, variable, wrap } from "./index";
 
 describe("wrap 函数测试", () => {
   test("包装 RegExp 并调用方法", () => {
@@ -7,9 +7,8 @@ describe("wrap 函数测试", () => {
     const input = variable<string>();
     const result = pattern.test(input);
 
-    const compiled = compile(result, { input });
-    expect(evaluate<boolean>(compiled, { input: "hello" })).toBe(true);
-    expect(evaluate<boolean>(compiled, { input: "hello123" })).toBe(false);
+    expect(compileAndEvaluate<boolean>(result, { input }, { input: "hello" })).toBe(true);
+    expect(compileAndEvaluate<boolean>(result, { input }, { input: "hello123" })).toBe(false);
   });
 
   test("包装 RegExp 作为参数使用", () => {
@@ -17,8 +16,7 @@ describe("wrap 函数测试", () => {
     const input = variable<string>();
     const result = input.match(pattern);
 
-    const compiled = compile(result, { input });
-    const evalResult = evaluate<RegExpMatchArray | null>(compiled, { input: "hello" });
+    const evalResult = compileAndEvaluate<RegExpMatchArray | null>(result, { input }, { input: "hello" });
     expect(evalResult).toBeInstanceOf(Array);
     expect(evalResult?.[0]).toBe("hello");
   });
@@ -28,11 +26,8 @@ describe("wrap 函数测试", () => {
     const year = date.getFullYear();
     const month = date.getMonth();
 
-    const compiled1 = compile(year, {});
-    expect(evaluate<number>(compiled1, {})).toBe(2024);
-
-    const compiled2 = compile(month, {});
-    expect(evaluate<number>(compiled2, {})).toBe(0); // January = 0
+    expect(compileAndEvaluate<number>(year, {}, {})).toBe(2024);
+    expect(compileAndEvaluate<number>(month, {}, {})).toBe(0); // January = 0
   });
 
   test("包装数字并进行运算", () => {
@@ -40,8 +35,7 @@ describe("wrap 函数测试", () => {
     const x = variable<number>();
     const result = expr({ ten, x })("ten + x");
 
-    const compiled = compile(result, { x });
-    expect(evaluate<number>(compiled, { x: 5 })).toBe(15);
+    expect(compileAndEvaluate<number>(result, { x }, { x: 5 })).toBe(15);
   });
 
   test("包装字符串并调用方法", () => {
@@ -49,11 +43,8 @@ describe("wrap 函数测试", () => {
     const upper = greeting.toUpperCase();
     const lower = greeting.toLowerCase();
 
-    const compiled1 = compile(upper, {});
-    expect(evaluate<string>(compiled1, {})).toBe("HELLO, WORLD!");
-
-    const compiled2 = compile(lower, {});
-    expect(evaluate<string>(compiled2, {})).toBe("hello, world!");
+    expect(compileAndEvaluate<string>(upper, {}, {})).toBe("HELLO, WORLD!");
+    expect(compileAndEvaluate<string>(lower, {}, {})).toBe("hello, world!");
   });
 
   test("包装数组并调用方法", () => {
@@ -61,8 +52,7 @@ describe("wrap 函数测试", () => {
     const x = variable<number>();
     const doubled = numbers.map(lambda<[number], number>((n) => expr({ n, x })("n * x")));
 
-    const compiled = compile(doubled, { x });
-    expect(evaluate<number[]>(compiled, { x: 2 })).toEqual([2, 4, 6, 8, 10]);
+    expect(compileAndEvaluate<number[]>(doubled, { x }, { x: 2 })).toEqual([2, 4, 6, 8, 10]);
   });
 
   test("包装对象并访问属性", () => {
@@ -70,11 +60,8 @@ describe("wrap 函数测试", () => {
     const port = config.port;
     const host = config.host;
 
-    const compiled1 = compile(port, {});
-    expect(evaluate<number>(compiled1, {})).toBe(8080);
-
-    const compiled2 = compile(host, {});
-    expect(evaluate<string>(compiled2, {})).toBe("localhost");
+    expect(compileAndEvaluate<number>(port, {}, {})).toBe(8080);
+    expect(compileAndEvaluate<string>(host, {}, {})).toBe("localhost");
   });
 
   test("wrap 与 variable 结合使用", () => {
@@ -82,9 +69,8 @@ describe("wrap 函数测试", () => {
     const text = variable<string>();
     const result = pattern.test(text);
 
-    const compiled = compile(result, { text });
-    expect(evaluate<boolean>(compiled, { text: "hello" })).toBe(true);
-    expect(evaluate<boolean>(compiled, { text: "123" })).toBe(false);
+    expect(compileAndEvaluate<boolean>(result, { text }, { text: "hello" })).toBe(true);
+    expect(compileAndEvaluate<boolean>(result, { text }, { text: "123" })).toBe(false);
   });
 
   test("包装 URL 并访问属性", () => {
@@ -93,14 +79,9 @@ describe("wrap 函数测试", () => {
     const port = url.port;
     const pathname = url.pathname;
 
-    const compiled1 = compile(host, {});
-    expect(evaluate<string>(compiled1, {})).toBe("example.com");
-
-    const compiled2 = compile(port, {});
-    expect(evaluate<string>(compiled2, {})).toBe("8080");
-
-    const compiled3 = compile(pathname, {});
-    expect(evaluate<string>(compiled3, {})).toBe("/path");
+    expect(compileAndEvaluate<string>(host, {}, {})).toBe("example.com");
+    expect(compileAndEvaluate<string>(port, {}, {})).toBe("8080");
+    expect(compileAndEvaluate<string>(pathname, {}, {})).toBe("/path");
   });
 
   test("包装 Map 并调用方法", () => {
@@ -113,9 +94,8 @@ describe("wrap 函数测试", () => {
     const key = variable<string>();
     const value = map.get(key);
 
-    const compiled = compile(value, { key });
-    expect(evaluate<number | undefined>(compiled, { key: "a" })).toBe(1);
-    expect(evaluate<number | undefined>(compiled, { key: "b" })).toBe(2);
+    expect(compileAndEvaluate<number | undefined>(value, { key }, { key: "a" })).toBe(1);
+    expect(compileAndEvaluate<number | undefined>(value, { key }, { key: "b" })).toBe(2);
   });
 
   test("包装 Set 并调用方法", () => {
@@ -123,9 +103,8 @@ describe("wrap 函数测试", () => {
     const num = variable<number>();
     const has = set.has(num);
 
-    const compiled = compile(has, { num });
-    expect(evaluate<boolean>(compiled, { num: 3 })).toBe(true);
-    expect(evaluate<boolean>(compiled, { num: 10 })).toBe(false);
+    expect(compileAndEvaluate<boolean>(has, { num }, { num: 3 })).toBe(true);
+    expect(compileAndEvaluate<boolean>(has, { num }, { num: 10 })).toBe(false);
   });
 
   test("链式调用 wrap 的结果", () => {
@@ -134,8 +113,7 @@ describe("wrap 函数测试", () => {
     const upper = trimmed.toUpperCase();
     const replaced = upper.replace("HELLO", "HI");
 
-    const compiled = compile(replaced, {});
-    expect(evaluate<string>(compiled, {})).toBe("HI WORLD");
+    expect(compileAndEvaluate<string>(replaced, {}, {})).toBe("HI WORLD");
   });
 
   test("包装 BigInt 并进行运算", () => {
@@ -143,8 +121,7 @@ describe("wrap 函数测试", () => {
     const x = variable<bigint>();
     const sum = expr({ big, x })("big + x");
 
-    const compiled = compile(sum, { x });
-    expect(evaluate<bigint>(compiled, { x: 50n })).toBe(150n);
+    expect(compileAndEvaluate<bigint>(sum, { x }, { x: 50n })).toBe(150n);
   });
 
   test("wrap 嵌套对象", () => {
@@ -157,11 +134,8 @@ describe("wrap 函数测试", () => {
     const name = data.user.name;
     const age = data.user.age;
 
-    const compiled1 = compile(name, {});
-    expect(evaluate<string>(compiled1, {})).toBe("Alice");
-
-    const compiled2 = compile(age, {});
-    expect(evaluate<number>(compiled2, {})).toBe(30);
+    expect(compileAndEvaluate<string>(name, {}, {})).toBe("Alice");
+    expect(compileAndEvaluate<number>(age, {}, {})).toBe(30);
   });
 
   test("wrap 与 expr 结合使用", () => {
@@ -170,9 +144,8 @@ describe("wrap 函数测试", () => {
     const matches = text.match(pattern);
     const length = expr({ matches })("matches ? matches.length : 0");
 
-    const compiled = compile(length, { text });
-    expect(evaluate<number>(compiled, { text: "a1b2c3" })).toBe(3);
-    expect(evaluate<number>(compiled, { text: "abc" })).toBe(0);
+    expect(compileAndEvaluate<number>(length, { text }, { text: "a1b2c3" })).toBe(3);
+    expect(compileAndEvaluate<number>(length, { text }, { text: "abc" })).toBe(0);
   });
 
   test("wrap TypedArray", () => {
@@ -180,9 +153,8 @@ describe("wrap 函数测试", () => {
     const index = variable<number>();
     const value = expr({ arr, index })("arr[index]");
 
-    const compiled = compile(value, { index });
-    expect(evaluate<number>(compiled, { index: 0 })).toBe(10);
-    expect(evaluate<number>(compiled, { index: 2 })).toBe(30);
+    expect(compileAndEvaluate<number>(value, { index }, { index: 0 })).toBe(10);
+    expect(compileAndEvaluate<number>(value, { index }, { index: 2 })).toBe(30);
   });
 
   test("wrap 复杂表达式", () => {
@@ -192,8 +164,7 @@ describe("wrap 函数测试", () => {
 
     const result = expr({ x, multiplier, offset })("x * multiplier + offset");
 
-    const compiled = compile(result, { x });
-    expect(evaluate<number>(compiled, { x: 5 })).toBe(20); // 5 * 2 + 10
-    expect(evaluate<number>(compiled, { x: 0 })).toBe(10);
+    expect(compileAndEvaluate<number>(result, { x }, { x: 5 })).toBe(20); // 5 * 2 + 10
+    expect(compileAndEvaluate<number>(result, { x }, { x: 0 })).toBe(10);
   });
 });

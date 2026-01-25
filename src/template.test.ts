@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { generate } from "./generate";
-import { compile, evaluate, expr, t, variable } from "./index";
+import { compileAndEvaluate, expr, t, variable } from "./index";
 import { getProxyMetadata } from "./proxy-metadata";
 
 describe("模板标签 单元测试", () => {
@@ -21,8 +21,7 @@ describe("模板标签 单元测试", () => {
     const name = variable<string>();
     const greeting = t`Hello, ${name}!`;
 
-    const compiled = compile(greeting, { name });
-    const result = evaluate(compiled, { name: "World" });
+    const result = compileAndEvaluate(greeting, { name }, { name: "World" });
     expect(result).toBe("Hello, World!");
   });
 
@@ -31,8 +30,7 @@ describe("模板标签 单元测试", () => {
     const last = variable<string>();
     const fullName = t`${first} ${last}`;
 
-    const compiled = compile(fullName, { first, last });
-    const result = evaluate(compiled, { first: "John", last: "Doe" });
+    const result = compileAndEvaluate(fullName, { first, last }, { first: "John", last: "Doe" });
     expect(result).toBe("John Doe");
   });
 
@@ -40,8 +38,7 @@ describe("模板标签 单元测试", () => {
     const count = variable<number>();
     const message = t`You have ${count} items`;
 
-    const compiled = compile(message, { count });
-    const result = evaluate(compiled, { count: 5 });
+    const result = compileAndEvaluate(message, { count }, { count: 5 });
     expect(result).toBe("You have 5 items");
   });
 
@@ -50,16 +47,14 @@ describe("模板标签 单元测试", () => {
     const doubled = expr({ x })("x * 2");
     const message = t`Double: ${doubled}`;
 
-    const compiled = compile(message, { x });
-    const result = evaluate(compiled, { x: 21 });
+    const result = compileAndEvaluate(message, { x }, { x: 21 });
     expect(result).toBe("Double: 42");
   });
 
   test("支持纯静态模板", () => {
     const message = t`Hello, World!`;
 
-    const compiled = compile(message, {});
-    const result = evaluate(compiled, {});
+    const result = compileAndEvaluate(message, {}, {});
     expect(result).toBe("Hello, World!");
   });
 
@@ -68,8 +63,7 @@ describe("模板标签 单元测试", () => {
     // Note: The backtick in the string should be escaped
     const code = t`Code: \`${name}\``;
 
-    const compiled = compile(code, { name });
-    const result = evaluate(compiled, { name: "test" });
+    const result = compileAndEvaluate(code, { name }, { name: "test" });
     expect(result).toBe("Code: `test`");
   });
 
@@ -79,8 +73,7 @@ describe("模板标签 单元测试", () => {
     // 如果只需要普通的美元符号，直接使用 $（只有 ${ 才是插值语法）
     const price = t`Price: $${amount}`;
 
-    const compiled = compile(price, { amount });
-    const result = evaluate(compiled, { amount: 99 });
+    const result = compileAndEvaluate(price, { amount }, { amount: 99 });
     expect(result).toBe("Price: $99");
   });
 
@@ -92,11 +85,14 @@ describe("模板标签 单元测试", () => {
     const name = variable<string>();
     const message = t`Hello, ${fmt.bold(name)}!`;
 
-    const compiled = compile(message, { fmt, name });
-    const result = evaluate(compiled, {
-      fmt: { bold: (t: string) => `**${t}**` },
-      name: "World",
-    });
+    const result = compileAndEvaluate(
+      message,
+      { fmt, name },
+      {
+        fmt: { bold: (t: string) => `**${t}**` },
+        name: "World",
+      }
+    );
     expect(result).toBe("Hello, **World**!");
   });
 
@@ -104,8 +100,7 @@ describe("模板标签 单元测试", () => {
     const items = variable<string[]>();
     const list = t`Items: ${items}`;
 
-    const compiled = compile(list, { items });
-    const result = evaluate(compiled, { items: ["a", "b"] });
+    const result = compileAndEvaluate(list, { items }, { items: ["a", "b"] });
     expect(result).toBe("Items: a,b");
   });
 });

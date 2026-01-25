@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { generate } from "./generate";
-import { compile, evaluate, variable, wrap } from "./index";
+import { compileAndEvaluate, variable, wrap } from "./index";
 import { serializeArgumentToAST } from "./proxy-variable";
 
 describe("内置类型序列化测试", () => {
@@ -20,12 +20,15 @@ describe("内置类型序列化测试", () => {
     const date = new Date("2024-01-01T00:00:00.000Z");
     const result = logger.log("Event", date);
 
-    const compiled = compile(result, { logger });
-    const evalResult = evaluate(compiled, {
-      logger: {
-        log: (msg: string, d: Date) => `${msg} at ${d.toISOString()}`,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { logger },
+      {
+        logger: {
+          log: (msg: string, d: Date) => `${msg} at ${d.toISOString()}`,
+        },
+      }
+    );
     expect(evalResult).toBe("Event at 2024-01-01T00:00:00.000Z");
   });
 
@@ -46,12 +49,15 @@ describe("内置类型序列化测试", () => {
     const pattern = /^[a-z]+$/i;
     const result = validator.match("hello", pattern);
 
-    const compiled = compile(result, { validator });
-    const evalResult = evaluate(compiled, {
-      validator: {
-        match: (text: string, pattern: RegExp) => pattern.test(text),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { validator },
+      {
+        validator: {
+          match: (text: string, pattern: RegExp) => pattern.test(text),
+        },
+      }
+    );
     expect(evalResult).toBe(true);
   });
 
@@ -60,9 +66,8 @@ describe("内置类型序列化测试", () => {
     const input = variable<string>();
     const result = pattern.test(input);
 
-    const compiled = compile(result, { input });
-    expect(evaluate<boolean>(compiled, { input: "hello" })).toBe(true);
-    expect(evaluate<boolean>(compiled, { input: "hello123" })).toBe(false);
+    expect(compileAndEvaluate<boolean>(result, { input }, { input: "hello" })).toBe(true);
+    expect(compileAndEvaluate<boolean>(result, { input }, { input: "hello123" })).toBe(false);
   });
 
   test("序列化 BigInt", () => {
@@ -80,12 +85,15 @@ describe("内置类型序列化测试", () => {
     const calc = variable<Calculator>();
     const result = calc.add(100n, 200n);
 
-    const compiled = compile(result, { calc });
-    const evalResult = evaluate(compiled, {
-      calc: {
-        add: (a: bigint, b: bigint) => a + b,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { calc },
+      {
+        calc: {
+          add: (a: bigint, b: bigint) => a + b,
+        },
+      }
+    );
     expect(evalResult).toBe(300n);
   });
 
@@ -105,12 +113,15 @@ describe("内置类型序列化测试", () => {
     const url = new URL("https://example.com/api");
     const result = fetcher.fetch(url);
 
-    const compiled = compile(result, { fetcher });
-    const evalResult = evaluate(compiled, {
-      fetcher: {
-        fetch: (url: URL) => url.href,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { fetcher },
+      {
+        fetcher: {
+          fetch: (url: URL) => url.href,
+        },
+      }
+    );
     expect(evalResult).toBe("https://example.com/api");
   });
 
@@ -137,12 +148,15 @@ describe("内置类型序列化测试", () => {
     ]);
     const result = http.buildQuery(params);
 
-    const compiled = compile(result, { http });
-    const evalResult = evaluate(compiled, {
-      http: {
-        buildQuery: (params: URLSearchParams) => params.toString(),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { http },
+      {
+        http: {
+          buildQuery: (params: URLSearchParams) => params.toString(),
+        },
+      }
+    );
     expect(evalResult).toBe("foo=bar&baz=qux");
   });
 
@@ -169,12 +183,15 @@ describe("内置类型序列化测试", () => {
     ]);
     const result = storage.get(map, "x");
 
-    const compiled = compile(result, { storage });
-    const evalResult = evaluate(compiled, {
-      storage: {
-        get: (map: Map<string, number>, key: string) => map.get(key),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { storage },
+      {
+        storage: {
+          get: (map: Map<string, number>, key: string) => map.get(key),
+        },
+      }
+    );
     expect(evalResult).toBe(10);
   });
 
@@ -195,12 +212,15 @@ describe("内置类型序列化测试", () => {
     const set = new Set([10, 20, 30]);
     const result = collection.has(set, 20);
 
-    const compiled = compile(result, { collection });
-    const evalResult = evaluate(compiled, {
-      collection: {
-        has: (set: Set<number>, value: number) => set.has(value),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { collection },
+      {
+        collection: {
+          has: (set: Set<number>, value: number) => set.has(value),
+        },
+      }
+    );
     expect(evalResult).toBe(true);
   });
 
@@ -221,12 +241,15 @@ describe("内置类型序列化测试", () => {
     const arr = new Uint8Array([10, 20, 30]);
     const result = buffer.sum(arr);
 
-    const compiled = compile(result, { buffer });
-    const evalResult = evaluate(compiled, {
-      buffer: {
-        sum: (arr: Uint8Array) => Array.from(arr).reduce((a, b) => a + b, 0),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { buffer },
+      {
+        buffer: {
+          sum: (arr: Uint8Array) => Array.from(arr).reduce((a, b) => a + b, 0),
+        },
+      }
+    );
     expect(evalResult).toBe(60);
   });
 
@@ -255,12 +278,15 @@ describe("内置类型序列化测试", () => {
     const arr = new BigInt64Array([999n, 888n, 777n]);
     const result = buffer.first(arr);
 
-    const compiled = compile(result, { buffer });
-    const evalResult = evaluate(compiled, {
-      buffer: {
-        first: (arr: BigInt64Array) => arr[0],
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { buffer },
+      {
+        buffer: {
+          first: (arr: BigInt64Array) => arr[0],
+        },
+      }
+    );
     expect(evalResult).toBe(999n);
   });
 
@@ -280,12 +306,15 @@ describe("内置类型序列化测试", () => {
     const buffer = new Uint8Array([1, 2, 3, 4, 5]).buffer;
     const result = util.byteLength(buffer);
 
-    const compiled = compile(result, { util });
-    const evalResult = evaluate(compiled, {
-      util: {
-        byteLength: (buffer: ArrayBuffer) => buffer.byteLength,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { util },
+      {
+        util: {
+          byteLength: (buffer: ArrayBuffer) => buffer.byteLength,
+        },
+      }
+    );
     expect(evalResult).toBe(5);
   });
 
@@ -307,12 +336,15 @@ describe("内置类型序列化测试", () => {
     const view = new DataView(buffer);
     const result = util.readUint8(view, 2);
 
-    const compiled = compile(result, { util });
-    const evalResult = evaluate(compiled, {
-      util: {
-        readUint8: (view: DataView, offset: number) => view.getUint8(offset),
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { util },
+      {
+        util: {
+          readUint8: (view: DataView, offset: number) => view.getUint8(offset),
+        },
+      }
+    );
     expect(evalResult).toBe(30);
   });
 
@@ -323,13 +355,16 @@ describe("内置类型序列化测试", () => {
     const handler = variable<MultiType>();
     const result = handler.process(new Date("2024-01-01"), /test/i, 123n, new Map([["a", 1]]), new Set([1, 2, 3]));
 
-    const compiled = compile(result, { handler });
-    const evalResult = evaluate(compiled, {
-      handler: {
-        process: (date: Date, regex: RegExp, bigint: bigint, map: Map<string, number>, set: Set<number>) =>
-          `${date.getFullYear()}-${regex.source}-${bigint}-${map.size}-${set.size}`,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { handler },
+      {
+        handler: {
+          process: (date: Date, regex: RegExp, bigint: bigint, map: Map<string, number>, set: Set<number>) =>
+            `${date.getFullYear()}-${regex.source}-${bigint}-${map.size}-${set.size}`,
+        },
+      }
+    );
     expect(evalResult).toBe("2024-test-123-1-3");
   });
 
@@ -344,18 +379,21 @@ describe("内置类型序列化测试", () => {
     ]);
     const result = handler.process(data);
 
-    const compiled = compile(result, { handler });
-    const evalResult = evaluate(compiled, {
-      handler: {
-        process: (data: Map<string, number[]>) => {
-          let sum = 0;
-          data.forEach((arr) => {
-            sum += arr.reduce((a, b) => a + b, 0);
-          });
-          return sum;
+    const evalResult = compileAndEvaluate(
+      result,
+      { handler },
+      {
+        handler: {
+          process: (data: Map<string, number[]>) => {
+            let sum = 0;
+            data.forEach((arr) => {
+              sum += arr.reduce((a, b) => a + b, 0);
+            });
+            return sum;
+          },
         },
-      },
-    });
+      }
+    );
     expect(evalResult).toBe(21);
   });
 
@@ -367,12 +405,15 @@ describe("内置类型序列化测试", () => {
     const data = new Set([new Map([["x", 1]]), new Map([["y", 2]])]);
     const result = handler.count(data);
 
-    const compiled = compile(result, { handler });
-    const evalResult = evaluate(compiled, {
-      handler: {
-        count: (data: Set<Map<string, number>>) => data.size,
-      },
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { handler },
+      {
+        handler: {
+          count: (data: Set<Map<string, number>>) => data.size,
+        },
+      }
+    );
     expect(evalResult).toBe(2);
   });
 });

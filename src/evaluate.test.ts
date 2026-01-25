@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, expr, variable } from "./index";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("evaluate 单元测试", () => {
   describe("缓存机制", () => {
@@ -47,8 +48,7 @@ describe("evaluate 单元测试", () => {
     test("空变量列表", () => {
       // 常量表达式
       const e = expr({})("1 + 2");
-      const compiled = compile(e, {});
-      expect(evaluate<number>(compiled, {})).toBe(3);
+      expect(compileAndEvaluate<number>(e, {}, {})).toBe(3);
     });
 
     test("undefined 和 null 值", () => {

@@ -1,3 +1,4 @@
+import type { CompileOptions } from "./compile";
 import { compile } from "./compile";
 import { evaluate } from "./evaluate";
 import type { LambdaBodyResult, Variable } from "./types";
@@ -34,7 +35,12 @@ type InferVariableValues<T extends Record<string, Variable<unknown>>> = {
 export function compileAndEvaluate<
   TResult = unknown,
   TVars extends Record<string, Variable<unknown>> = Record<string, Variable<unknown>>,
->(expr: LambdaBodyResult<TResult>, variables: TVars, values: InferVariableValues<TVars>): TResult {
-  const compiled = compile(expr, variables);
+>(
+  expr: LambdaBodyResult<TResult>,
+  variables: TVars,
+  values: InferVariableValues<TVars>,
+  options?: CompileOptions
+): TResult {
+  const compiled = compile(expr, variables, options);
   return evaluate<TResult>(compiled, values);
 }

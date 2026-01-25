@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, evaluate, expr, variable } from "./index";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("集成测试：编译优化", () => {
   describe("自动内联优化", () => {
@@ -20,7 +21,7 @@ describe("集成测试：编译优化", () => {
 
       // 执行结果正确
       const values = { x: 2, y: 3 };
-      const evalResult = evaluate<number>(compiled, values);
+      const evalResult = compileAndEvaluate<number>(result, { x, y }, values);
       expect(evalResult).toBe(11); // 2+3 + 2*3 = 5+6 = 11
     });
 
@@ -31,10 +32,7 @@ describe("集成测试：编译优化", () => {
       const sum = expr({ x })("x + 1");
       const result = expr({ sum })("sum * sum");
 
-      const compiled = compile(result, { x });
-
-      // 执行结果正确
-      const value = evaluate<number>(compiled, { x: 2 });
+      const value = compileAndEvaluate<number>(result, { x }, { x: 2 });
       expect(value).toBe(9); // (2+1)*(2+1) = 3*3 = 9
     });
   });
@@ -56,7 +54,7 @@ describe("集成测试：编译优化", () => {
       // 执行结果正确
       const values = { x: 5 };
       const expected = ((5 + 1) * 2 - 3) / 2; // (6*2-3)/2 = 9/2 = 4.5
-      expect(evaluate<number>(compiled, values)).toBe(expected);
+      expect(compileAndEvaluate<number>(e4, { x }, values)).toBe(expected);
     });
 
     test("分支表达式", () => {
@@ -69,12 +67,10 @@ describe("集成测试：编译优化", () => {
       const right = expr({ base })("base * 3");
       const result = expr({ left, right })("left + right");
 
-      const compiled = compile(result, { x, y });
-
       // 执行结果正确
       const values = { x: 1, y: 2 };
       // base = 3, left = 6, right = 9, result = 15
-      expect(evaluate<number>(compiled, values)).toBe(15);
+      expect(compileAndEvaluate<number>(result, { x, y }, values)).toBe(15);
     });
   });
 

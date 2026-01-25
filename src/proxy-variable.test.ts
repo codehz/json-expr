@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { generate } from "./generate";
-import { compile, evaluate, variable } from "./index";
+import { variable } from "./index";
 import { getProxyMetadata } from "./proxy-metadata";
+import { compileAndEvaluate } from "./test-helper";
 
 describe("代理变量 单元测试", () => {
   test("创建代理变量", () => {
@@ -35,8 +36,7 @@ describe("代理变量 单元测试", () => {
     const config = variable<Config>();
     const timeout = config.timeout;
 
-    const compiled = compile(timeout, { config });
-    const result = evaluate(compiled, { config: { timeout: 5000 } });
+    const result = compileAndEvaluate(timeout, { config }, { config: { timeout: 5000 } });
     expect(result).toBe(5000);
   });
 
@@ -63,8 +63,7 @@ describe("代理变量 单元测试", () => {
     const calc = variable<Calculator>();
     const sum = calc.add(1, 2);
 
-    const compiled = compile(sum, { calc });
-    const result = evaluate(compiled, { calc: { add: (a: number, b: number) => a + b } });
+    const result = compileAndEvaluate(sum, { calc }, { calc: { add: (a: number, b: number) => a + b } });
     expect(result).toBe(3);
   });
 
@@ -76,11 +75,14 @@ describe("代理变量 单元测试", () => {
     const x = variable<number>();
     const doubled = calc.double(x);
 
-    const compiled = compile(doubled, { calc, x });
-    const result = evaluate(compiled, {
-      calc: { double: (n: number) => n * 2 },
-      x: 5,
-    });
+    const result = compileAndEvaluate(
+      doubled,
+      { calc, x },
+      {
+        calc: { double: (n: number) => n * 2 },
+        x: 5,
+      }
+    );
     expect(result).toBe(10);
   });
 
@@ -92,7 +94,6 @@ describe("代理变量 单元测试", () => {
     const builder = variable<Builder>();
     const result = builder.setName("test").build();
 
-    const compiled = compile(result, { builder });
     const mockBuilder = {
       name: "",
       setName(name: string) {
@@ -103,7 +104,7 @@ describe("代理变量 单元测试", () => {
         return { name: this.name };
       },
     };
-    const evalResult = evaluate(compiled, { builder: mockBuilder });
+    const evalResult = compileAndEvaluate(result, { builder }, { builder: mockBuilder });
     expect(evalResult).toEqual({ name: "test" });
   });
 
@@ -118,10 +119,13 @@ describe("代理变量 单元测试", () => {
     const obj = variable<Nested>();
     const value = obj.level1.level2.value;
 
-    const compiled = compile(value, { obj });
-    const result = evaluate(compiled, {
-      obj: { level1: { level2: { value: 42 } } },
-    });
+    const result = compileAndEvaluate(
+      value,
+      { obj },
+      {
+        obj: { level1: { level2: { value: 42 } } },
+      }
+    );
     expect(result).toBe(42);
   });
 
@@ -132,10 +136,13 @@ describe("代理变量 单元测试", () => {
     const ui = variable<UI>();
     const list = ui.list(["a", "b", "c"]);
 
-    const compiled = compile(list, { ui });
-    const result = evaluate(compiled, {
-      ui: { list: (items: string[]) => items.join(",") },
-    });
+    const result = compileAndEvaluate(
+      list,
+      { ui },
+      {
+        ui: { list: (items: string[]) => items.join(",") },
+      }
+    );
     expect(result).toBe("a,b,c");
   });
 
@@ -163,11 +170,14 @@ describe("代理变量 单元测试", () => {
     const count = variable<number>();
     const result = fmt.format("Count: ", count);
 
-    const compiled = compile(result, { fmt, count });
-    const evalResult = evaluate(compiled, {
-      fmt: { format: (t: string, v: number) => t + v },
-      count: 42,
-    });
+    const evalResult = compileAndEvaluate(
+      result,
+      { fmt, count },
+      {
+        fmt: { format: (t: string, v: number) => t + v },
+        count: 42,
+      }
+    );
     expect(evalResult).toBe("Count: 42");
   });
 });
