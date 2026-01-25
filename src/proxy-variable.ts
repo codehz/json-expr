@@ -288,8 +288,12 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
       const ast = buildMemberExprAst(id, [String(prop)]);
       return createProxyExpressionWithAST<unknown>(ast, deps);
     },
-    apply() {
-      throw new Error("Variable cannot be called directly");
+    apply(_target, _thisArg, args) {
+      // Variable 可以直接调用，生成函数调用 AST
+      const callAst = callExpr(placeholder(id), args.map(serializeArgumentToAST));
+      const newDeps = new Set(deps);
+      collectDepsFromArgs(args, newDeps);
+      return createProxyExpressionWithAST<T>(callAst, newDeps);
     },
   });
 
