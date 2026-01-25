@@ -742,7 +742,8 @@ type InferMemberType<Obj, Prop extends string> =
   Obj extends Record<string, unknown> ? (Prop extends keyof Obj ? Obj[Prop] : unknown) : unknown;
 
 /** 函数调用类型推导 */
-type InferCallType<Callee> = Callee extends (...args: unknown[]) => infer R ? R : unknown;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type InferCallType<Callee> = Callee extends (...args: any[]) => infer R ? R : unknown;
 
 // ============================================================================
 // 主要导出类型
