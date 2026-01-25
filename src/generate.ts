@@ -12,8 +12,8 @@ import { BUILTIN_CONSTRUCTORS, PRECEDENCE, RIGHT_ASSOCIATIVE } from "./ast-types
 export interface GenerateContext {
   /** lambda 参数计数器，用于生成唯一参数名 */
   lambdaParamCounter: number;
-  /** 占位符到实际参数名的映射 */
-  paramMapping: Map<string, string>;
+  /** 占位符 Symbol 到实际参数名的映射 */
+  paramMapping: Map<symbol, string>;
 }
 
 /**
@@ -52,10 +52,15 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
     case "NullLiteral":
       return "null";
 
-    case "Identifier": {
-      // 检查是否是 lambda 参数占位符
-      const mappedName = ctx.paramMapping.get(node.name);
-      return mappedName ?? node.name;
+    case "Identifier":
+      return node.name;
+
+    case "Placeholder": {
+      // 查找 lambda 参数映射
+      const mappedName = ctx.paramMapping.get(node.id);
+      if (mappedName) return mappedName;
+      // 未编译的占位符输出为特殊格式（用于测试/调试）
+      return `$$${node.id.description}$$`;
     }
 
     case "BinaryExpr": {
@@ -118,11 +123,19 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
     case "ArrowFunctionExpr": {
       // 为每个参数分配唯一的参数名
       const paramNames: string[] = [];
+      const placeholderIds: symbol[] = [];
+
       for (const param of node.params) {
-        const uniqueName = `_${ctx.lambdaParamCounter++}`;
-        paramNames.push(uniqueName);
-        // 建立占位符到实际参数名的映射
-        ctx.paramMapping.set(param.name, uniqueName);
+        if (param.type === "Placeholder") {
+          // Placeholder 参数：分配唯一名称并建立映射
+          const uniqueName = `_${ctx.lambdaParamCounter++}`;
+          paramNames.push(uniqueName);
+          placeholderIds.push(param.id);
+          ctx.paramMapping.set(param.id, uniqueName);
+        } else {
+          // Identifier 参数：直接使用名称
+          paramNames.push(param.name);
+        }
       }
 
       const paramsStr = paramNames.length === 1 ? paramNames[0]! : `(${paramNames.join(",")})`;
@@ -131,11 +144,9 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
           ? `(${generateWithContext(node.body, ctx)})`
           : generateWithContext(node.body, ctx);
 
-      // 清理参数映射（可选，防止污染外层作用域）
-      // 注意：由于我们使用唯一的参数名，不清理也不会冲突
-      // 但为了语义清晰，在函数体生成完成后移除映射
-      for (const param of node.params) {
-        ctx.paramMapping.delete(param.name);
+      // 清理 Placeholder 参数映射
+      for (const id of placeholderIds) {
+        ctx.paramMapping.delete(id);
       }
 
       return `${paramsStr}=>${body}`;
@@ -220,6 +231,10 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
       return typeof result === "string" ? { ...node, name: result } : result;
     }
 
+    case "Placeholder":
+      // Placeholder 不是 Identifier，保持不变
+      return node;
+
     case "BinaryExpr":
       return {
         ...node,
@@ -273,11 +288,95 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
       };
 
     case "ArrowFunctionExpr": {
-      // 箭头函数：参数名不转换，只转换函数体中的非参数标识符
-      const paramNames = new Set(node.params.map((p) => p.name));
+      // 箭头函数：只转换 Identifier 参数名，Placeholder 参数保持不变
+      // 只转换函数体中的非参数标识符
+      const paramNames = new Set(
+        node.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
+      );
       return {
         ...node,
         body: transformIdentifiers(node.body, (name) => (paramNames.has(name) ? name : transform(name))),
+      };
+    }
+
+    default:
+      return node;
+  }
+}
+
+/**
+ * 转换 AST 中的占位符节点
+ * 回调函数接收 symbol，返回 Identifier 节点的名称
+ * 如果返回 null/undefined，则保留原始 Placeholder 节点
+ */
+export function transformPlaceholders(node: ASTNode, transform: (id: symbol) => string | null | undefined): ASTNode {
+  switch (node.type) {
+    case "Placeholder": {
+      const name = transform(node.id);
+      return name != null ? { type: "Identifier", name } : node;
+    }
+
+    case "Identifier":
+      return node;
+
+    case "BinaryExpr":
+      return {
+        ...node,
+        left: transformPlaceholders(node.left, transform),
+        right: transformPlaceholders(node.right, transform),
+      };
+
+    case "UnaryExpr":
+      return {
+        ...node,
+        argument: transformPlaceholders(node.argument, transform),
+      };
+
+    case "ConditionalExpr":
+      return {
+        ...node,
+        test: transformPlaceholders(node.test, transform),
+        consequent: transformPlaceholders(node.consequent, transform),
+        alternate: transformPlaceholders(node.alternate, transform),
+      };
+
+    case "MemberExpr":
+      return {
+        ...node,
+        object: transformPlaceholders(node.object, transform),
+        property: node.computed ? transformPlaceholders(node.property, transform) : node.property,
+      };
+
+    case "CallExpr":
+      return {
+        ...node,
+        callee: transformPlaceholders(node.callee, transform),
+        arguments: node.arguments.map((arg) => transformPlaceholders(arg, transform)),
+      };
+
+    case "ArrayExpr":
+      return {
+        ...node,
+        elements: node.elements.map((el) => transformPlaceholders(el, transform)),
+      };
+
+    case "ObjectExpr":
+      return {
+        ...node,
+        properties: node.properties.map((prop) => ({
+          ...prop,
+          key: prop.computed ? transformPlaceholders(prop.key, transform) : prop.key,
+          value: transformPlaceholders(prop.value, transform),
+        })),
+      };
+
+    case "ArrowFunctionExpr": {
+      // 箭头函数：参数保持不变（Placeholder 参数在代码生成时处理）
+      // 函数体中的 Placeholder 需要转换，但要排除参数本身的 symbol
+      const paramSymbols = new Set(node.params.filter((p) => p.type === "Placeholder").map((p) => p.id));
+      return {
+        ...node,
+        body: transformPlaceholders(node.body, (id) => (paramSymbols.has(id) ? null : transform(id))),
       };
     }
 
@@ -341,7 +440,10 @@ export function collectIdentifiers(node: ASTNode): Set<string> {
       case "ArrowFunctionExpr": {
         // 箭头函数：收集参数名和函数体中的标识符
         // 但从闭包角度，只需收集非参数的自由变量
-        const paramNames = new Set(n.params.map((p) => p.name));
+        // 只考虑 Identifier 参数，Placeholder 参数在编译时处理
+        const paramNames = new Set(
+          n.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
+        );
         const bodyIdentifiers = collectIdentifiers(n.body);
         for (const id of bodyIdentifiers) {
           if (!paramNames.has(id)) {

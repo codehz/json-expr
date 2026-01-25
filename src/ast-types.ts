@@ -28,6 +28,16 @@ export interface Identifier {
   name: string;
 }
 
+/**
+ * 变量占位符节点
+ * 用于表示变量引用或 lambda 参数，在编译/代码生成时被替换
+ */
+export interface Placeholder {
+  type: "Placeholder";
+  /** 变量或 lambda 参数的唯一标识符 */
+  id: symbol;
+}
+
 export interface BinaryExpr {
   type: "BinaryExpr";
   operator: string;
@@ -83,7 +93,7 @@ export interface ObjectProperty {
 
 export interface ArrowFunctionExpr {
   type: "ArrowFunctionExpr";
-  params: Identifier[];
+  params: (Identifier | Placeholder)[];
   body: ASTNode;
 }
 
@@ -94,6 +104,7 @@ export type ASTNode =
   | BooleanLiteral
   | NullLiteral
   | Identifier
+  | Placeholder
   | BinaryExpr
   | UnaryExpr
   | ConditionalExpr

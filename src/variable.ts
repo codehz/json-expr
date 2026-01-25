@@ -37,20 +37,3 @@ export function getVariableId(variable: unknown): symbol | undefined {
   if ((typeof variable !== "object" && typeof variable !== "function") || variable === null) return undefined;
   return variableIds.get(variable);
 }
-
-/**
- * 生成变量占位符字符串
- * 格式：$$VAR_var_N$$
- */
-export function getVariablePlaceholder(id: symbol): string {
-  return `$$VAR_${id.description}$$`;
-}
-
-/**
- * 从占位符提取变量 ID 描述
- * 返回 null 如果不是有效占位符
- */
-export function parseVariablePlaceholder(placeholder: string): string | null {
-  const match = placeholder.match(/^\$\$VAR_(.+)\$\$$/);
-  return match ? (match[1] ?? null) : null;
-}

@@ -1,5 +1,5 @@
 import type { ASTNode } from "./ast-types";
-import { generate, transformIdentifiers } from "./generate";
+import { generate, transformIdentifiers, transformPlaceholders } from "./generate";
 import { serializeArgumentToAST } from "./proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, JumpNode, LambdaBodyResult, PhiNode } from "./types";
 import { getVariableId } from "./variable";
@@ -83,10 +83,10 @@ export function compile<TResult>(
 
   const ast = serializeArgumentToAST(expression);
 
-  // 建立变量名到索引的映射
+  // 建立变量名到索引的映射，以及 symbol -> 变量名的映射
   const variableOrder: string[] = [];
   const variableToIndex = new Map<string, number>();
-  const descToName = new Map<string, string>();
+  const symbolToName = new Map<symbol, string>();
 
   for (const [name, value] of Object.entries(variables)) {
     if (!variableToIndex.has(name)) {
@@ -94,24 +94,32 @@ export function compile<TResult>(
       variableOrder.push(name);
     }
     const id = getVariableId(value);
-    if (id?.description) {
-      descToName.set(id.description, name);
+    if (id) {
+      symbolToName.set(id, name);
     }
   }
 
-  // 转换 AST：将占位符替换为变量名，然后替换为 $N
+  // 第一步：转换 Placeholder 节点为 $N 格式的 Identifier
+  // lambda 参数的 Placeholder 保留不转换（返回 null）
+  const placeholderTransformed = transformPlaceholders(ast, (id) => {
+    const name = symbolToName.get(id);
+    if (!name) return null; // 不是变量占位符（可能是 lambda 参数），保留
+    const index = variableToIndex.get(name);
+    if (index === undefined) return null;
+    return `$${index}`;
+  });
+
+  // 第二步：检查是否有未定义的 Identifier（非全局对象）
   const undefinedVars: string[] = [];
-  const transformed = transformIdentifiers(ast, (name) => {
-    const placeholderMatch = name.match(/^\$\$VAR_(.+)\$\$$/);
-    const resolvedName = placeholderMatch ? descToName.get(placeholderMatch[1]!) : name;
+  const transformed = transformIdentifiers(placeholderTransformed, (name) => {
+    // 已经转换为 $N 的跳过
+    if (name.startsWith("$") && /^\$\d+$/.test(name)) return name;
 
-    if (placeholderMatch && !resolvedName) throw new Error(`Unknown variable placeholder: ${name}`);
-
-    const index = variableToIndex.get(resolvedName!);
+    const index = variableToIndex.get(name);
     if (index !== undefined) return `$${index}`;
 
-    if (!ALLOWED_GLOBALS.has(resolvedName!)) undefinedVars.push(resolvedName!);
-    return resolvedName!;
+    if (!ALLOWED_GLOBALS.has(name)) undefinedVars.push(name);
+    return name;
   });
 
   if (undefinedVars.length > 0) {

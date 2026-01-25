@@ -9,6 +9,7 @@ import type {
   NullLiteral,
   NumberLiteral,
   ObjectExpr,
+  Placeholder,
   StringLiteral,
 } from "./ast-types";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
@@ -45,11 +46,10 @@ const typedArrayConstructors = [
 ];
 
 /**
- * 使用 Symbol.description 生成占位符
- * 用于在表达式源码中标识变量
+ * 创建占位符 AST 节点
  */
-function getVariablePlaceholder(id: symbol): string {
-  return `$$VAR_${id.description}$$`;
+function placeholder(id: symbol): Placeholder {
+  return { type: "Placeholder", id };
 }
 
 /**
@@ -123,9 +123,9 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
     if (meta) {
       // 如果有 ast，直接返回
       if (meta.ast) return meta.ast;
-      // 否则是根 variable，返回占位符标识符
+      // 否则是根 variable，返回占位符节点
       if (meta.rootVariable) {
-        return identifier(getVariablePlaceholder(meta.rootVariable));
+        return placeholder(meta.rootVariable);
       }
     }
   }
@@ -245,7 +245,7 @@ export function collectDepsFromArgs(args: unknown[], deps: Set<symbol>): void {
  * 根据路径构建成员表达式 AST
  */
 function buildMemberExprAst(rootId: symbol, path: string[]): ASTNode {
-  let ast: ASTNode = identifier(getVariablePlaceholder(rootId));
+  let ast: ASTNode = placeholder(rootId);
   for (const prop of path) {
     ast = memberExpr(ast, identifier(prop));
   }

@@ -1,11 +1,11 @@
-import type { ASTNode } from "./ast-types";
+import type { ASTNode, Placeholder } from "./ast-types";
 import { transformIdentifiers } from "./generate";
 import { parse } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 import { createProxyExpressionWithAST } from "./proxy-variable";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";
 import type { Proxify } from "./types";
-import { getVariableId, getVariablePlaceholder } from "./variable";
+import { getVariableId } from "./variable";
 
 /**
  * 创建表达式
@@ -95,12 +95,12 @@ export function expr<TContext extends Record<string, unknown>>(
     const ast = parse(source as string);
 
     // 在 AST 级别进行标识符替换
-    const transformedAst = transformIdentifiers(ast, (name) => {
+    const transformedAst = transformIdentifiers(ast, (name): string | ASTNode => {
       // 检查是否是 context 中的变量
       const id = nameToId.get(name);
       if (id) {
-        // 返回占位符标识符名称
-        return getVariablePlaceholder(id);
+        // 返回占位符节点
+        return { type: "Placeholder", id } satisfies Placeholder;
       }
 
       // 检查是否是子表达式

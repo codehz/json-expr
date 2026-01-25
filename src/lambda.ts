@@ -149,18 +149,17 @@ function extractBodyAstAndDeps(bodyExpr: unknown): { bodyAst: ASTNode; bodyDeps:
 
 /**
  * 创建箭头函数 AST
- * 使用占位符参数名，在代码生成时再分配实际参数名
+ * 使用 Placeholder 节点作为参数，在代码生成时再分配实际参数名
  */
 function createArrowFunctionAst(bodyAst: ASTNode, paramCount: number, paramSymbols: symbol[]): ASTNode {
-  const paramIdentifiers = Array.from({ length: paramCount }, (_, i) => ({
-    type: "Identifier" as const,
-    // 使用占位符，在 generate 时会被替换为唯一参数名
-    name: `$$VAR_${paramSymbols[i]?.description}$$`,
+  const paramPlaceholders = Array.from({ length: paramCount }, (_, i) => ({
+    type: "Placeholder" as const,
+    id: paramSymbols[i]!,
   }));
 
   return {
     type: "ArrowFunctionExpr",
-    params: paramIdentifiers,
+    params: paramPlaceholders,
     body: bodyAst,
   };
 }
