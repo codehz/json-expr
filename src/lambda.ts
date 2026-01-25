@@ -1,5 +1,5 @@
 // lambda.ts
-import type { ASTNode } from "./parser";
+import type { ASTNode } from "./ast-types";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import {
   collectDepsFromArgs,

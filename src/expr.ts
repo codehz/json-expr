@@ -1,4 +1,6 @@
-import { parse, transformIdentifiers, type ASTNode } from "./parser";
+import type { ASTNode } from "./ast-types";
+import { transformIdentifiers } from "./generate";
+import { parse } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 import { createProxyExpressionWithAST } from "./proxy-variable";
 import type { InferExpressionResult, ValidateExpression } from "./type-parser";

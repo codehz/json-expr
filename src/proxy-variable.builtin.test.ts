@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { generate } from "./generate";
 import { compile, evaluate, variable, wrap } from "./index";
-import { generate } from "./parser";
 import { serializeArgumentToAST } from "./proxy-variable";
 
 describe("内置类型序列化测试", () => {

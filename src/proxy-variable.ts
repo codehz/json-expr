@@ -10,7 +10,7 @@ import type {
   NumberLiteral,
   ObjectExpr,
   StringLiteral,
-} from "./parser";
+} from "./ast-types";
 import { getProxyMetadata, setProxyMetadata } from "./proxy-metadata";
 import type { Proxify } from "./types";
 

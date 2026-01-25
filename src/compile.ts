@@ -1,4 +1,5 @@
-import { generate, transformIdentifiers, type ASTNode } from "./parser";
+import type { ASTNode } from "./ast-types";
+import { generate, transformIdentifiers } from "./generate";
 import { serializeArgumentToAST } from "./proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, JumpNode, LambdaBodyResult, PhiNode } from "./types";
 import { getVariableId } from "./variable";

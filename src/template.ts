@@ -1,4 +1,4 @@
-import type { ASTNode, BinaryExpr, StringLiteral } from "./parser";
+import type { ASTNode, BinaryExpr, StringLiteral } from "./ast-types";
 import { collectDepsFromArgs, createProxyExpressionWithAST, serializeArgumentToAST } from "./proxy-variable";
 import type { Proxify } from "./types";
 

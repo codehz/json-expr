@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { generate } from "./generate";
 import { compile, evaluate, variable } from "./index";
-import { generate } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 
 describe("代理变量 单元测试", () => {

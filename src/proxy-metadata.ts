@@ -1,5 +1,5 @@
 // proxy-metadata.ts
-import type { ASTNode } from "./parser";
+import type { ASTNode } from "./ast-types";
 
 /**
  * Proxy 元数据接口

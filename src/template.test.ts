@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { generate } from "./generate";
 import { compile, evaluate, expr, t, variable } from "./index";
-import { generate } from "./parser";
 import { getProxyMetadata } from "./proxy-metadata";
 
 describe("模板标签 单元测试", () => {

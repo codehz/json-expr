@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { collectIdentifiers, generate, parse, transformIdentifiers } from "./parser";
+import { collectIdentifiers, generate, transformIdentifiers } from "./generate";
+import { parse } from "./parser";
 
 describe("parser 单元测试", () => {
   describe("parse 函数测试", () => {
