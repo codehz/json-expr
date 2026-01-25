@@ -442,17 +442,33 @@ type ParseUnary<S extends string> =
     ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
       ? ParseResult<ASTUnary<"!", Operand>, Rest2>
       : ParseError
-    : TrimStart<S> extends `-${infer Rest}`
-      ? IsDigit<Rest extends `${infer C}${string}` ? C : ""> extends true
-        ? ParsePostfix<S> // 负数字面量
-        : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
-          ? ParseResult<ASTUnary<"-", Operand>, Rest2>
-          : ParseError
-      : TrimStart<S> extends `+${infer Rest}`
-        ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
-          ? ParseResult<ASTUnary<"+", Operand>, Rest2>
-          : ParseError
-        : ParsePostfix<S>;
+    : TrimStart<S> extends `~${infer Rest}`
+      ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+        ? ParseResult<ASTUnary<"~", Operand>, Rest2>
+        : ParseError
+      : TrimStart<S> extends `typeof${infer Rest}`
+        ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+          ? ParseError // typeof 后必须有空格或其他分隔符
+          : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+            ? ParseResult<ASTUnary<"typeof", Operand>, Rest2>
+            : ParseError
+        : TrimStart<S> extends `void${infer Rest}`
+          ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+            ? ParseError // void 后必须有空格或其他分隔符
+            : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+              ? ParseResult<ASTUnary<"void", Operand>, Rest2>
+              : ParseError
+          : TrimStart<S> extends `-${infer Rest}`
+            ? IsDigit<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParsePostfix<S> // 负数字面量
+              : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+                ? ParseResult<ASTUnary<"-", Operand>, Rest2>
+                : ParseError
+            : TrimStart<S> extends `+${infer Rest}`
+              ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+                ? ParseResult<ASTUnary<"+", Operand>, Rest2>
+                : ParseError
+              : ParsePostfix<S>;
 
 /** 解析后缀运算符（成员访问、函数调用） */
 type ParsePostfix<S extends string> =
@@ -587,7 +603,15 @@ export type InferTypeFromAST<AST, TypeMap> = AST extends ASTNumber
                     : unknown;
 
 /** 一元运算符类型推导 */
-type InferUnaryType<Op extends string, __Operand> = Op extends "!" ? boolean : Op extends "-" | "+" ? number : unknown;
+type InferUnaryType<Op extends string, __Operand> = Op extends "!"
+  ? boolean
+  : Op extends "-" | "+"
+    ? number
+    : Op extends "typeof"
+      ? string
+      : Op extends "~"
+        ? number
+        : unknown;
 
 /** 二元运算符类型推导 */
 type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
@@ -602,23 +626,25 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
           ? number
           : number | string
         : unknown
-  : Op extends "-" | "*" | "/" | "%"
+  : Op extends "-" | "*" | "/" | "%" | "**"
     ? number
-    : Op extends "<" | ">" | "<=" | ">=" | "==" | "!=" | "===" | "!=="
-      ? boolean
-      : Op extends "&&"
-        ? Left extends false
-          ? Left
-          : Right
-        : Op extends "||"
-          ? Left extends true
+    : Op extends "&" | "|" | "^" | "<<" | ">>" | ">>>"
+      ? number
+      : Op extends "<" | ">" | "<=" | ">=" | "==" | "!=" | "===" | "!=="
+        ? boolean
+        : Op extends "&&"
+          ? Left extends false
             ? Left
             : Right
-          : Op extends "??"
-            ? Left extends null | undefined
-              ? Right
-              : Exclude<Left, null | undefined> | Right
-            : unknown;
+          : Op extends "||"
+            ? Left extends true
+              ? Left
+              : Right
+            : Op extends "??"
+              ? Left extends null | undefined
+                ? Right
+                : Exclude<Left, null | undefined> | Right
+              : unknown;
 
 /** 成员访问类型推导 */
 type InferMemberType<Obj, Prop extends string> =
