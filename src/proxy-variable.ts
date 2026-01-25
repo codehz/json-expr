@@ -242,17 +242,6 @@ export function collectDepsFromArgs(args: unknown[], deps: Set<symbol>): void {
 }
 
 /**
- * 根据路径构建成员表达式 AST
- */
-function buildMemberExprAst(rootId: symbol, path: string[]): ASTNode {
-  let ast: ASTNode = placeholder(rootId);
-  for (const prop of path) {
-    ast = memberExpr(ast, identifier(prop));
-  }
-  return ast;
-}
-
-/**
  * 创建 Proxy 的公共 handler
  */
 function createProxyHandler<T>(ast: ASTNode, deps: Set<symbol>): ProxyHandler<Proxify<T>> {
@@ -281,51 +270,14 @@ function createProxyHandler<T>(ast: ASTNode, deps: Set<symbol>): ProxyHandler<Pr
  */
 export function createProxyVariable<T>(id: symbol): Proxify<T> {
   const deps = new Set([id]);
+  const ast = placeholder(id);
 
-  const proxy = new Proxy(function () {} as unknown as Proxify<T>, {
-    get(_target, prop) {
-      if (typeof prop === "symbol") return undefined;
-      const ast = buildMemberExprAst(id, [String(prop)]);
-      return createProxyExpressionWithAST<unknown>(ast, deps);
-    },
-    apply(_target, _thisArg, args) {
-      // Variable 可以直接调用，生成函数调用 AST
-      const callAst = callExpr(placeholder(id), args.map(serializeArgumentToAST));
-      const newDeps = new Set(deps);
-      collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithAST<T>(callAst, newDeps);
-    },
-  });
+  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
 
   setProxyMetadata(proxy, {
     type: "variable",
     path: [],
     rootVariable: id,
-    dependencies: deps,
-  });
-
-  return proxy;
-}
-
-/**
- * 创建属性访问后的 Proxy
- * 继续拦截属性访问（链式访问）
- * 拦截 apply 进行方法调用
- *
- * @param rootId - 根变量的 Symbol
- * @param path - 属性访问路径
- * @param deps - 依赖集合
- * @returns Proxy 包装的 Expression
- */
-export function createProxyExpression<T>(rootId: symbol, path: string[], deps: Set<symbol>): Proxify<T> {
-  const ast = buildMemberExprAst(rootId, path);
-  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
-
-  setProxyMetadata(proxy, {
-    type: "expression",
-    path,
-    rootVariable: rootId,
-    ast,
     dependencies: deps,
   });
 
