@@ -276,7 +276,6 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
 
   setProxyMetadata(proxy, {
     type: "variable",
-    path: [],
     rootVariable: id,
     dependencies: deps,
   });
@@ -297,7 +296,6 @@ export function createProxyExpressionWithAST<T>(ast: ASTNode, deps: Set<symbol>)
 
   setProxyMetadata(proxy, {
     type: "expression",
-    path: [],
     ast,
     dependencies: deps,
   });

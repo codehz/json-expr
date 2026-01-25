@@ -6,7 +6,6 @@ import type { ASTNode } from "./ast-types";
  */
 export interface ProxyMetadata {
   type: "variable" | "expression";
-  path: string[]; // 表达式路径，如 ["ui", "Text"]
   ast?: ASTNode; // 完整表达式 AST（expression 类型）
   rootVariable?: symbol; // 根 variable 的唯一标识
   dependencies?: Set<symbol>; // 依赖的所有 variable Symbol
