@@ -1,4 +1,4 @@
-import type { Expression, ProxyExpression, Variable } from "./types";
+import type { ProxyExpression, Variable } from "./types";
 
 // ============================================================================
 // 工具类型
@@ -189,15 +189,8 @@ type ExtractIdentifiers<S extends string, Collected extends string = never> = S 
 // 上下文验证
 // ============================================================================
 
-/** 从 Variable 或 Expression 提取值类型 */
-export type ExtractType<T> =
-  T extends ProxyExpression<infer V>
-    ? V
-    : T extends Variable<infer V>
-      ? V
-      : T extends Expression<unknown, infer R>
-        ? R
-        : never;
+/** 从 Variable 提取值类型 */
+export type ExtractType<T> = T extends ProxyExpression<infer V> ? V : T extends Variable<infer V> ? V : never;
 
 /** 从上下文对象构建类型映射 */
 export type ContextTypeMap<TContext> = {

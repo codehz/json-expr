@@ -165,33 +165,6 @@ export type Proxify<T> = ProxyExpression<T> &
  */
 export type Variable<T = unknown> = Proxify<T>;
 
-// ============================================================================
-// 旧式类型定义（兼容性保留）
-// ============================================================================
-
-/**
- * 旧式变量类型定义
- * @template T - 变量的值类型
- * @deprecated 请使用新的 Proxy 类型系统
- */
-export type LegacyVariable<T = unknown> = {
-  _tag: "variable";
-  _type: T; // 仅用于类型推导，运行时不存在
-};
-
-/**
- * 表示一个表达式
- * @template TContext - 表达式上下文类型
- * @template TResult - 表达式结果类型
- * @deprecated 请使用新的 Proxy 类型系统
- */
-export type Expression<TContext = Record<string, unknown>, TResult = unknown> = {
-  _tag: "expression";
-  context: TContext;
-  source: string;
-  _type: TResult; // 仅用于类型推导，运行时不存在
-};
-
 /**
  * 条件跳转节点
  * 如果条件为 truthy，跳过 offset 条指令
@@ -259,14 +232,8 @@ export type InferVariableType<V> = V extends Variable<infer T> ? T : never;
  * @template C - 上下文对象类型
  */
 export type InferContextType<C> = {
-  [K in keyof C]: C[K] extends Variable<infer T> ? T : C[K] extends Expression<unknown, infer R> ? R : never;
+  [K in keyof C]: C[K] extends Variable<infer T> ? T : never;
 };
-
-/**
- * 从 Expression 推导结果类型
- * @template E - Expression 类型
- */
-export type InferExpressionType<E> = E extends Expression<unknown, infer R> ? R : never;
 
 // ============================================================================
 // Lambda 类型系统
