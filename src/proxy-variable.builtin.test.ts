@@ -283,7 +283,7 @@ describe("内置类型序列化测试", () => {
       { buffer },
       {
         buffer: {
-          first: (arr: BigInt64Array) => arr[0],
+          first: (arr: BigInt64Array) => arr[0]!,
         },
       }
     );
