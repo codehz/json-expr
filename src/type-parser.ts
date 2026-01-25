@@ -271,17 +271,21 @@ interface ASTUnknown {
 // ============================================================================
 
 /** 运算符优先级（从低到高） */
-// Level 1: || (逻辑或)
-// Level 2: && (逻辑与)
-// Level 3: | (位或)
-// Level 4: ^ (位异或)
-// Level 5: & (位与)
-// Level 6: ==, !=, ===, !== (相等)
-// Level 7: <, >, <=, >= (比较)
-// Level 8: +, - (加减)
-// Level 9: *, /, % (乘除)
-// Level 10: 一元运算符
-// Level 11: 成员访问、函数调用
+// Level 1: ?: (三元)
+// Level 2: ?? (空值合并)
+// Level 3: || (逻辑或)
+// Level 4: && (逻辑与)
+// Level 5: | (位或)
+// Level 6: ^ (位异或)
+// Level 7: & (位与)
+// Level 8: ==, !=, ===, !== (相等)
+// Level 9: <, >, <=, >= (比较)
+// Level 10: <<, >>, >>> (位移)
+// Level 11: +, - (加减)
+// Level 12: *, /, % (乘除)
+// Level 13: ** (幂运算，右结合)
+// Level 14: 一元运算符
+// Level 15: 成员访问、函数调用
 
 /** 解析结果：[AST, 剩余字符串] */
 type ParseResult<T, Rest extends string> = { ast: T; rest: Rest };
@@ -329,15 +333,58 @@ type ParseNullishCoalescingTail<Left, S extends string> =
 
 /** 解析逻辑与 && */
 type ParseLogicalAnd<S extends string> =
-  ParseEquality<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+  ParseBitwiseOr<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
     ? ParseLogicalAndTail<Left, Rest>
     : ParseError;
 
 type ParseLogicalAndTail<Left, S extends string> =
   TrimStart<S> extends `&&${infer Rest}`
-    ? ParseEquality<Rest> extends ParseResult<infer Right, infer Rest2>
+    ? ParseBitwiseOr<Rest> extends ParseResult<infer Right, infer Rest2>
       ? ParseLogicalAndTail<ASTBinary<"&&", Left, Right>, Rest2>
       : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位或 | */
+type ParseBitwiseOr<S extends string> =
+  ParseBitwiseXor<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseOrTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseOrTail<Left, S extends string> =
+  TrimStart<S> extends `|${infer Rest}`
+    ? Rest extends `|${string}`
+      ? ParseResult<Left, S> // 排除 ||
+      : ParseBitwiseXor<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseBitwiseOrTail<ASTBinary<"|", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位异或 ^ */
+type ParseBitwiseXor<S extends string> =
+  ParseBitwiseAnd<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseXorTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseXorTail<Left, S extends string> =
+  TrimStart<S> extends `^${infer Rest}`
+    ? ParseBitwiseAnd<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseBitwiseXorTail<ASTBinary<"^", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位与 & */
+type ParseBitwiseAnd<S extends string> =
+  ParseEquality<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseAndTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseAndTail<Left, S extends string> =
+  TrimStart<S> extends `&${infer Rest}`
+    ? Rest extends `&${string}`
+      ? ParseResult<Left, S> // 排除 &&
+      : ParseEquality<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseBitwiseAndTail<ASTBinary<"&", Left, Right>, Rest2>
+        : ParseResult<Left, S>
     : ParseResult<Left, S>;
 
 /** 解析相等性运算符 */
@@ -371,32 +418,49 @@ type ParseEqualityTail<Left, S extends string> =
 
 /** 解析比较运算符 */
 type ParseComparison<S extends string> =
-  ParseAdditive<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
-    ? ParseComparisonTail<Left, Rest>
-    : ParseError;
+  ParseShift<TrimStart<S>> extends ParseResult<infer Left, infer Rest> ? ParseComparisonTail<Left, Rest> : ParseError;
 
 type ParseComparisonTail<Left, S extends string> =
   TrimStart<S> extends `<=${infer Rest}`
-    ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+    ? ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
       ? ParseComparisonTail<ASTBinary<"<=", Left, Right>, Rest2>
       : ParseResult<Left, S>
     : TrimStart<S> extends `>=${infer Rest}`
-      ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
         ? ParseComparisonTail<ASTBinary<">=", Left, Right>, Rest2>
         : ParseResult<Left, S>
       : TrimStart<S> extends `<${infer Rest}`
-        ? Rest extends `=${string}`
-          ? ParseResult<Left, S> // 排除 <=
-          : ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? Rest extends `=${string}` | `<${string}`
+          ? ParseResult<Left, S> // 排除 <=, <<
+          : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
             ? ParseComparisonTail<ASTBinary<"<", Left, Right>, Rest2>
             : ParseResult<Left, S>
         : TrimStart<S> extends `>${infer Rest}`
-          ? Rest extends `=${string}`
-            ? ParseResult<Left, S> // 排除 >=
-            : ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+          ? Rest extends `=${string}` | `>${string}`
+            ? ParseResult<Left, S> // 排除 >=, >>
+            : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
               ? ParseComparisonTail<ASTBinary<">", Left, Right>, Rest2>
               : ParseResult<Left, S>
           : ParseResult<Left, S>;
+
+/** 解析位移运算符 */
+type ParseShift<S extends string> =
+  ParseAdditive<TrimStart<S>> extends ParseResult<infer Left, infer Rest> ? ParseShiftTail<Left, Rest> : ParseError;
+
+type ParseShiftTail<Left, S extends string> =
+  TrimStart<S> extends `<<${infer Rest}`
+    ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseShiftTail<ASTBinary<"<<", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : TrimStart<S> extends `>>>${infer Rest}`
+      ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseShiftTail<ASTBinary<">>>", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : TrimStart<S> extends `>>${infer Rest}`
+        ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+          ? ParseShiftTail<ASTBinary<">>", Left, Right>, Rest2>
+          : ParseResult<Left, S>
+        : ParseResult<Left, S>;
 
 /** 解析加减运算符 */
 type ParseAdditive<S extends string> =
@@ -417,24 +481,39 @@ type ParseAdditiveTail<Left, S extends string> =
 
 /** 解析乘除运算符 */
 type ParseMultiplicative<S extends string> =
-  ParseUnary<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+  ParseExponentiation<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
     ? ParseMultiplicativeTail<Left, Rest>
     : ParseError;
 
 type ParseMultiplicativeTail<Left, S extends string> =
   TrimStart<S> extends `*${infer Rest}`
-    ? ParseUnary<Rest> extends ParseResult<infer Right, infer Rest2>
-      ? ParseMultiplicativeTail<ASTBinary<"*", Left, Right>, Rest2>
-      : ParseResult<Left, S>
+    ? Rest extends `*${string}`
+      ? ParseResult<Left, S> // 排除 **
+      : ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseMultiplicativeTail<ASTBinary<"*", Left, Right>, Rest2>
+        : ParseResult<Left, S>
     : TrimStart<S> extends `/${infer Rest}`
-      ? ParseUnary<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
         ? ParseMultiplicativeTail<ASTBinary<"/", Left, Right>, Rest2>
         : ParseResult<Left, S>
       : TrimStart<S> extends `%${infer Rest}`
-        ? ParseUnary<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
           ? ParseMultiplicativeTail<ASTBinary<"%", Left, Right>, Rest2>
           : ParseResult<Left, S>
         : ParseResult<Left, S>;
+
+/** 解析幂运算符（右结合） */
+type ParseExponentiation<S extends string> =
+  ParseUnary<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseExponentiationTail<Left, Rest>
+    : ParseError;
+
+type ParseExponentiationTail<Left, S extends string> =
+  TrimStart<S> extends `**${infer Rest}`
+    ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseResult<ASTBinary<"**", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
 
 /** 解析一元运算符 */
 type ParseUnary<S extends string> =
