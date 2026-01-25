@@ -251,6 +251,11 @@ interface ASTMemberAccess<Obj = unknown, Prop extends string = string> {
   object: Obj;
   property: Prop;
 }
+interface ASTComputedMember<Obj = unknown, Index = unknown> {
+  type: "computed";
+  object: Obj;
+  index: Index;
+}
 interface ASTCall<Callee = unknown, Args extends unknown[] = unknown[]> {
   type: "call";
   callee: Callee;
@@ -258,6 +263,14 @@ interface ASTCall<Callee = unknown, Args extends unknown[] = unknown[]> {
 }
 interface ASTUnknown {
   type: "unknown";
+}
+interface ASTArray<Elements extends unknown[] = unknown[]> {
+  type: "array";
+  elements: Elements;
+}
+interface ASTObject<Props extends Record<string, unknown> = Record<string, unknown>> {
+  type: "object";
+  properties: Props;
 }
 
 // ============================================================================
@@ -567,9 +580,9 @@ type ParsePostfixTail<Base, S extends string> =
         : ParsePostfixTail<ASTMemberAccess<Base, Prop>, Rest2>
       : ParseResult<Base, S>
     : TrimStart<S> extends `[${infer Rest}`
-      ? ParseTernary<Rest> extends ParseResult<infer _Index, infer Rest2>
+      ? ParseTernary<Rest> extends ParseResult<infer Index, infer Rest2>
         ? TrimStart<Rest2> extends `]${infer Rest3}`
-          ? ParsePostfixTail<ASTMemberAccess<Base, "[computed]">, Rest3>
+          ? ParsePostfixTail<ASTComputedMember<Base, Index>, Rest3>
           : ParseResult<Base, S>
         : ParseResult<Base, S>
       : TrimStart<S> extends `(${infer Rest}`
@@ -597,6 +610,54 @@ type ParseNumberLiteral<S extends string, Acc extends string = ""> = S extends `
     : [Acc, S]
   : [Acc, S];
 
+/** 解析数组字面量 */
+type ParseArrayLiteral<S extends string, Elements extends unknown[] = []> =
+  TrimStart<S> extends `]${infer Rest}`
+    ? ParseResult<ASTArray<Elements>, Rest>
+    : ParseTernary<S> extends ParseResult<infer Element, infer Rest>
+      ? TrimStart<Rest> extends `,${infer Rest2}`
+        ? ParseArrayLiteral<Rest2, [...Elements, Element]>
+        : TrimStart<Rest> extends `]${infer Rest2}`
+          ? ParseResult<ASTArray<[...Elements, Element]>, Rest2>
+          : ParseError
+      : ParseError;
+
+/** 解析对象属性键 */
+type ParseObjectKey<S extends string> =
+  TrimStart<S> extends `'${infer _}`
+    ? SkipSingleQuoteStringContent<TrimStart<S> extends `'${infer Rest}` ? Rest : never> extends `${infer Rest}`
+      ? TrimStart<S> extends `'${infer Key}'${infer _Rest}`
+        ? { key: Key; rest: Rest }
+        : never
+      : never
+    : TrimStart<S> extends `"${infer _}`
+      ? SkipDoubleQuoteStringContent<TrimStart<S> extends `"${infer Rest}` ? Rest : never> extends `${infer Rest}`
+        ? TrimStart<S> extends `"${infer Key}"${infer _Rest}`
+          ? { key: Key; rest: Rest }
+          : never
+        : never
+      : ParseIdentifier<TrimStart<S>> extends [infer Key extends string, infer Rest extends string]
+        ? Key extends ""
+          ? never
+          : { key: Key; rest: Rest }
+        : never;
+
+/** 解析对象字面量 */
+type ParseObjectLiteral<S extends string, Props extends Record<string, unknown> = {}> =
+  TrimStart<S> extends `}${infer Rest}`
+    ? ParseResult<ASTObject<Props>, Rest>
+    : ParseObjectKey<S> extends { key: infer Key extends string; rest: infer Rest1 extends string }
+      ? TrimStart<Rest1> extends `:${infer Rest2}`
+        ? ParseTernary<Rest2> extends ParseResult<infer Value, infer Rest3>
+          ? TrimStart<Rest3> extends `,${infer Rest4}`
+            ? ParseObjectLiteral<Rest4, Props & Record<Key, Value>>
+            : TrimStart<Rest3> extends `}${infer Rest4}`
+              ? ParseResult<ASTObject<Props & Record<Key, Value>>, Rest4>
+              : ParseError
+          : ParseError
+        : ParseError
+      : ParseError;
+
 /** 解析主表达式 */
 type ParsePrimary<S extends string> =
   TrimStart<S> extends `(${infer Rest}`
@@ -605,35 +666,39 @@ type ParsePrimary<S extends string> =
         ? ParseResult<ASTParen<Inner>, Rest3>
         : ParseError
       : ParseError
-    : TrimStart<S> extends `true${infer Rest}`
-      ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
-        ? ParseIdentifierPrimary<S>
-        : ParseResult<ASTBoolean, Rest>
-      : TrimStart<S> extends `false${infer Rest}`
-        ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
-          ? ParseIdentifierPrimary<S>
-          : ParseResult<ASTBoolean, Rest>
-        : TrimStart<S> extends `${infer C}${infer __Rest}`
-          ? IsDigit<C> extends true
-            ? ParseNumberLiteral<TrimStart<S>> extends [infer __Num, infer Rest2 extends string]
-              ? ParseResult<ASTNumber, Rest2>
-              : ParseError
-            : C extends "-"
-              ? TrimStart<__Rest> extends `${infer C2}${string}`
-                ? IsDigit<C2> extends true
-                  ? ParseNumberLiteral<TrimStart<__Rest>> extends [infer __Num, infer Rest2 extends string]
-                    ? ParseResult<ASTNumber, Rest2>
+    : TrimStart<S> extends `[${infer Rest}`
+      ? ParseArrayLiteral<Rest>
+      : TrimStart<S> extends `{${infer Rest}`
+        ? ParseObjectLiteral<Rest>
+        : TrimStart<S> extends `true${infer Rest}`
+          ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+            ? ParseIdentifierPrimary<S>
+            : ParseResult<ASTBoolean, Rest>
+          : TrimStart<S> extends `false${infer Rest}`
+            ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParseIdentifierPrimary<S>
+              : ParseResult<ASTBoolean, Rest>
+            : TrimStart<S> extends `${infer C}${infer __Rest}`
+              ? IsDigit<C> extends true
+                ? ParseNumberLiteral<TrimStart<S>> extends [infer __Num, infer Rest2 extends string]
+                  ? ParseResult<ASTNumber, Rest2>
+                  : ParseError
+                : C extends "-"
+                  ? TrimStart<__Rest> extends `${infer C2}${string}`
+                    ? IsDigit<C2> extends true
+                      ? ParseNumberLiteral<TrimStart<__Rest>> extends [infer __Num, infer Rest2 extends string]
+                        ? ParseResult<ASTNumber, Rest2>
+                        : ParseError
+                      : ParseError
                     : ParseError
-                  : ParseError
-                : ParseError
-              : C extends "'" | '"' | "`"
-                ? ParseStringLiteral<TrimStart<S>> extends { rest: infer Rest2 extends string }
-                  ? ParseResult<ASTString, Rest2>
-                  : ParseError
-                : IsIdentifierStart<C> extends true
-                  ? ParseIdentifierPrimary<S>
-                  : ParseError
-          : ParseError;
+                  : C extends "'" | '"' | "`"
+                    ? ParseStringLiteral<TrimStart<S>> extends { rest: infer Rest2 extends string }
+                      ? ParseResult<ASTString, Rest2>
+                      : ParseError
+                    : IsIdentifierStart<C> extends true
+                      ? ParseIdentifierPrimary<S>
+                      : ParseError
+              : ParseError;
 
 type ParseIdentifierPrimary<S extends string> =
   ParseIdentifier<TrimStart<S>> extends [infer Name extends string, infer Rest extends string]
@@ -662,6 +727,19 @@ export type ParseExpression<S extends string> =
 // 类型推导
 // ============================================================================
 
+/** 推导数组元素类型 */
+type InferArrayElements<Elements extends unknown[], TypeMap, Result extends unknown[] = []> = Elements extends [
+  infer First,
+  ...infer Rest,
+]
+  ? InferArrayElements<Rest, TypeMap, [...Result, InferTypeFromAST<First, TypeMap>]>
+  : Result;
+
+/** 推导对象属性类型 */
+type InferObjectProperties<Props, TypeMap> = {
+  [K in keyof Props]: InferTypeFromAST<Props[K], TypeMap>;
+};
+
 /** 从 AST 推导类型 */
 export type InferTypeFromAST<AST, TypeMap> = AST extends ASTNumber
   ? number
@@ -669,25 +747,31 @@ export type InferTypeFromAST<AST, TypeMap> = AST extends ASTNumber
     ? string
     : AST extends ASTBoolean
       ? boolean
-      : AST extends ASTIdentifier<infer Name>
-        ? Name extends keyof GlobalTypeMap
-          ? GlobalTypeMap[Name]
-          : Name extends keyof TypeMap
-            ? TypeMap[Name]
-            : unknown
-        : AST extends ASTUnary<infer Op, infer __Operand>
-          ? InferUnaryType<Op, InferTypeFromAST<__Operand, TypeMap>>
-          : AST extends ASTBinary<infer Op, infer Left, infer Right>
-            ? InferBinaryType<Op, InferTypeFromAST<Left, TypeMap>, InferTypeFromAST<Right, TypeMap>>
-            : AST extends ASTTernary<infer __Cond, infer Then, infer Else>
-              ? InferTypeFromAST<Then, TypeMap> | InferTypeFromAST<Else, TypeMap>
-              : AST extends ASTParen<infer Inner>
-                ? InferTypeFromAST<Inner, TypeMap>
-                : AST extends ASTMemberAccess<infer Obj, infer Prop>
-                  ? InferMemberType<InferTypeFromAST<Obj, TypeMap>, Prop>
-                  : AST extends ASTCall<infer Callee, infer __Args>
-                    ? InferCallType<InferTypeFromAST<Callee, TypeMap>>
-                    : unknown;
+      : AST extends ASTArray<infer Elements>
+        ? InferArrayElements<Elements, TypeMap>
+        : AST extends ASTObject<infer Props>
+          ? InferObjectProperties<Props, TypeMap>
+          : AST extends ASTIdentifier<infer Name>
+            ? Name extends keyof GlobalTypeMap
+              ? GlobalTypeMap[Name]
+              : Name extends keyof TypeMap
+                ? TypeMap[Name]
+                : unknown
+            : AST extends ASTUnary<infer Op, infer __Operand>
+              ? InferUnaryType<Op, InferTypeFromAST<__Operand, TypeMap>>
+              : AST extends ASTBinary<infer Op, infer Left, infer Right>
+                ? InferBinaryType<Op, InferTypeFromAST<Left, TypeMap>, InferTypeFromAST<Right, TypeMap>>
+                : AST extends ASTTernary<infer __Cond, infer Then, infer Else>
+                  ? InferTypeFromAST<Then, TypeMap> | InferTypeFromAST<Else, TypeMap>
+                  : AST extends ASTParen<infer Inner>
+                    ? InferTypeFromAST<Inner, TypeMap>
+                    : AST extends ASTMemberAccess<infer Obj, infer Prop>
+                      ? InferMemberType<InferTypeFromAST<Obj, TypeMap>, Prop>
+                      : AST extends ASTComputedMember<infer Obj, infer _Index>
+                        ? InferComputedMemberType<InferTypeFromAST<Obj, TypeMap>>
+                        : AST extends ASTCall<infer Callee, infer __Args>
+                          ? InferCallType<InferTypeFromAST<Callee, TypeMap>>
+                          : unknown;
 
 /** 一元运算符类型推导 */
 type InferUnaryType<Op extends string, __Operand> = Op extends "!"
@@ -708,15 +792,27 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
       : string | number
     : Right extends string
       ? string | number
-      : Left extends number
-        ? Right extends number
-          ? number
-          : number | string
-        : unknown
+      : Left extends bigint
+        ? Right extends bigint
+          ? bigint
+          : unknown
+        : Left extends number
+          ? Right extends number
+            ? number
+            : number | string
+          : unknown
   : Op extends "-" | "*" | "/" | "%" | "**"
-    ? number
+    ? Left extends bigint
+      ? Right extends bigint
+        ? bigint
+        : unknown
+      : number
     : Op extends "&" | "|" | "^" | "<<" | ">>" | ">>>"
-      ? number
+      ? Left extends bigint
+        ? Right extends bigint
+          ? bigint
+          : unknown
+        : number
       : Op extends "<" | ">" | "<=" | ">=" | "==" | "!=" | "===" | "!==" | "in" | "instanceof"
         ? boolean
         : Op extends "&&"
@@ -735,6 +831,13 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
 
 /** 成员访问类型推导 */
 type InferMemberType<Obj, Prop extends string> = Prop extends keyof Obj ? Obj[Prop] : unknown;
+
+/** 计算属性访问类型推导 */
+type InferComputedMemberType<Obj> = Obj extends readonly (infer T)[]
+  ? T
+  : Obj extends Record<string, infer V>
+    ? V
+    : unknown;
 
 /** 函数调用类型推导 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
