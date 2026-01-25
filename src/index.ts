@@ -6,23 +6,19 @@ export { lambda } from "./lambda";
 export { isProxy, isProxyExpression, isProxyVariable } from "./proxy-metadata";
 export { t } from "./template";
 export { compileAndEvaluate } from "./test-helper";
-export { getVariableId, variable } from "./variable";
+export { variable } from "./variable";
 export { wrap } from "./wrap";
 
 // 类型导出
 export type {
   BranchNode,
-  CompileContext,
   CompiledData,
   CompiledExpression,
   ControlFlowNode,
-  ExprNode,
   FilterCallback,
   FindCallback,
-  InferContextType,
   InferLambdaArgs,
   InferLambdaReturn,
-  InferVariableType,
   JumpNode,
   Lambda,
   LambdaBuilder,
