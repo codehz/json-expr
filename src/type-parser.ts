@@ -104,20 +104,7 @@ type ReservedWords =
   | "this"
   | "typeof"
   | "instanceof"
-  | "Math"
-  | "Number"
-  | "String"
-  | "Boolean"
-  | "Array"
-  | "Object"
-  | "Date"
-  | "JSON"
-  | "parseInt"
-  | "parseFloat"
-  | "isNaN"
-  | "isFinite"
-  | "NaN"
-  | "Infinity";
+  | keyof GlobalTypeMap;
 
 // ============================================================================
 // 标识符提取
