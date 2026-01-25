@@ -441,7 +441,19 @@ type ParseComparisonTail<Left, S extends string> =
             : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
               ? ParseComparisonTail<ASTBinary<">", Left, Right>, Rest2>
               : ParseResult<Left, S>
-          : ParseResult<Left, S>;
+          : TrimStart<S> extends `in${infer Rest}`
+            ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParseResult<Left, S> // in 后必须有空格或其他分隔符
+              : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+                ? ParseComparisonTail<ASTBinary<"in", Left, Right>, Rest2>
+                : ParseResult<Left, S>
+            : TrimStart<S> extends `instanceof${infer Rest}`
+              ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+                ? ParseResult<Left, S> // instanceof 后必须有空格或其他分隔符
+                : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+                  ? ParseComparisonTail<ASTBinary<"instanceof", Left, Right>, Rest2>
+                  : ParseResult<Left, S>
+              : ParseResult<Left, S>;
 
 /** 解析位移运算符 */
 type ParseShift<S extends string> =
@@ -709,7 +721,7 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
     ? number
     : Op extends "&" | "|" | "^" | "<<" | ">>" | ">>>"
       ? number
-      : Op extends "<" | ">" | "<=" | ">=" | "==" | "!=" | "===" | "!=="
+      : Op extends "<" | ">" | "<=" | ">=" | "==" | "!=" | "===" | "!==" | "in" | "instanceof"
         ? boolean
         : Op extends "&&"
           ? Left extends false
