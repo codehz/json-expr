@@ -1,7 +1,7 @@
 import type { ASTNode } from "./ast-types";
 import { generate, transformIdentifiers, transformPlaceholders } from "./generate";
 import { serializeArgumentToAST } from "./proxy-variable";
-import type { BranchNode, CompiledData, CompiledExpression, JumpNode, LambdaBodyResult, PhiNode } from "./types";
+import type { BranchNode, CompiledData, CompiledExpression, ExprValue, JumpNode, PhiNode } from "./types";
 import { getVariableId } from "./variable";
 
 const ALLOWED_GLOBALS = new Set([
@@ -75,7 +75,7 @@ export interface CompileOptions {
  * ```
  */
 export function compile<TResult>(
-  expression: LambdaBodyResult<TResult>,
+  expression: ExprValue<TResult>,
   variables: Record<string, unknown>,
   options: CompileOptions = {}
 ): CompiledData {

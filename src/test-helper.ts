@@ -1,7 +1,7 @@
 import type { CompileOptions } from "./compile";
 import { compile } from "./compile";
 import { evaluate } from "./evaluate";
-import type { LambdaBodyResult, UnproxyDeep, Variable } from "./types";
+import type { ExprValue, UnproxyDeep, Variable } from "./types";
 
 /**
  * 从变量映射推导值类型
@@ -36,7 +36,7 @@ export function compileAndEvaluate<
   TResult = unknown,
   TVars extends Record<string, Variable<unknown>> = Record<string, Variable<unknown>>,
 >(
-  expr: LambdaBodyResult<TResult>,
+  expr: ExprValue<TResult>,
   variables: TVars,
   values: InferVariableValues<TVars>,
   options?: CompileOptions

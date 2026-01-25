@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { compile, compileAndEvaluate, evaluate, expr, variable } from "./index";
-import type { LambdaBodyResult } from "./types";
+import type { ExprValue } from "./types";
 
 describe("集成测试：布尔表达式", () => {
   describe("比较运算符", () => {
@@ -17,7 +17,7 @@ describe("集成测试：布尔表达式", () => {
       ] as const;
 
       for (const t of tests) {
-        const e = expr({ x, y })(t.expr) as LambdaBodyResult<boolean>;
+        const e = expr({ x, y })(t.expr) as ExprValue<boolean>;
         expect(compileAndEvaluate<boolean>(e, { x, y }, t.values)).toBe(t.expected);
       }
     });

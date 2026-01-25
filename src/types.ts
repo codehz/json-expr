@@ -280,13 +280,13 @@ type DeepPartialProxy<T> = T extends Primitive
       : T;
 
 /**
- * Lambda 函数体返回值类型
- * 支持返回：
- * - Proxify<R>: 完整的代理表达式
+ * 表达式值类型
+ * 支持：
+ * - Proxify<T>: 完整的代理表达式
  * - 原始值: 字符串、数字等
  * - 对象/数组: 可以混合 Proxy 值和原始值
  */
-export type LambdaBodyResult<T> = Proxify<T> | DeepPartialProxy<T>;
+export type ExprValue<T> = Proxify<T> | DeepPartialProxy<T>;
 
 /**
  * Lambda 构建函数签名
@@ -295,7 +295,7 @@ export type LambdaBodyResult<T> = Proxify<T> | DeepPartialProxy<T>;
  */
 export type LambdaBuilder<Args extends unknown[], R> = (
   ...params: { [K in keyof Args]: LambdaParam<Args[K]> }
-) => LambdaBodyResult<R>;
+) => ExprValue<R>;
 
 /**
  * Lambda 表达式类型

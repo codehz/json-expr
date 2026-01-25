@@ -12,6 +12,7 @@ export { wrap } from "./wrap";
 export type {
   CompiledData,
   CompiledExpression,
+  ExprValue,
   InferLambdaArgs,
   InferLambdaReturn,
   Lambda,
