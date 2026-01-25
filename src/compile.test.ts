@@ -59,7 +59,7 @@ describe("compile 单元测试", () => {
       const sum = expr({ x, y })("x + y + z");
 
       expect(() => {
-        compile(sum as unknown as import("./types").ProxyExpression<number>, { x, y });
+        compile(sum, { x, y });
       }).toThrow("Undefined variable(s): z");
     });
   });
