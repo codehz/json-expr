@@ -835,9 +835,11 @@ type InferMemberType<Obj, Prop extends string> = Prop extends keyof Obj ? Obj[Pr
 /** 计算属性访问类型推导 */
 type InferComputedMemberType<Obj> = Obj extends readonly (infer T)[]
   ? T
-  : Obj extends Record<string, infer V>
-    ? V
-    : unknown;
+  : Obj extends { [index: number]: infer T }
+    ? T
+    : Obj extends Record<string, infer V>
+      ? V
+      : unknown;
 
 /** 函数调用类型推导 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
