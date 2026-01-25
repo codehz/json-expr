@@ -303,14 +303,27 @@ type ParseTernary<S extends string> =
 
 /** 解析逻辑或 || */
 type ParseLogicalOr<S extends string> =
-  ParseLogicalAnd<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+  ParseNullishCoalescing<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
     ? ParseLogicalOrTail<Left, Rest>
     : ParseError;
 
 type ParseLogicalOrTail<Left, S extends string> =
   TrimStart<S> extends `||${infer Rest}`
-    ? ParseLogicalAnd<Rest> extends ParseResult<infer Right, infer Rest2>
+    ? ParseNullishCoalescing<Rest> extends ParseResult<infer Right, infer Rest2>
       ? ParseLogicalOrTail<ASTBinary<"||", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析空值合并 ?? */
+type ParseNullishCoalescing<S extends string> =
+  ParseLogicalAnd<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseNullishCoalescingTail<Left, Rest>
+    : ParseError;
+
+type ParseNullishCoalescingTail<Left, S extends string> =
+  TrimStart<S> extends `??${infer Rest}`
+    ? ParseLogicalAnd<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseNullishCoalescingTail<ASTBinary<"??", Left, Right>, Rest2>
       : ParseResult<Left, S>
     : ParseResult<Left, S>;
 
@@ -601,7 +614,11 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
           ? Left extends true
             ? Left
             : Right
-          : unknown;
+          : Op extends "??"
+            ? Left extends null | undefined
+              ? Right
+              : Exclude<Left, null | undefined> | Right
+            : unknown;
 
 /** 成员访问类型推导 */
 type InferMemberType<Obj, Prop extends string> =

@@ -1,7 +1,7 @@
 import type { CompileOptions } from "./compile";
 import { compile } from "./compile";
 import { evaluate } from "./evaluate";
-import type { LambdaBodyResult, Variable } from "./types";
+import type { LambdaBodyResult, UnproxyDeep, Variable } from "./types";
 
 /**
  * 从变量映射推导值类型
@@ -40,7 +40,7 @@ export function compileAndEvaluate<
   variables: TVars,
   values: InferVariableValues<TVars>,
   options?: CompileOptions
-): TResult {
+): UnproxyDeep<TResult> {
   const compiled = compile(expr, variables, options);
-  return evaluate<TResult>(compiled, values);
+  return evaluate<TResult>(compiled, values) as UnproxyDeep<TResult>;
 }

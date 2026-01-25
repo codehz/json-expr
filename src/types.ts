@@ -273,6 +273,23 @@ export type InferExpressionType<E> = E extends Expression<unknown, infer R> ? R 
 // ============================================================================
 
 /**
+ * 递归地去除 Proxify 包装
+ * 处理嵌套的对象和数组中的所有 Proxy 类型
+ * - 如果是 Proxify<T>，提取并返回 UnproxyDeep<T>
+ * - 如果是对象，递归处理每个属性
+ * - 如果是数组，递归处理元素
+ * - 其他情况返回原值
+ */
+export type UnproxyDeep<T> =
+  T extends ProxyExpression<infer U>
+    ? UnproxyDeep<U>
+    : T extends readonly (infer E)[]
+      ? UnproxyDeep<E>[]
+      : T extends object
+        ? { [K in keyof T]: UnproxyDeep<T[K]> }
+        : T;
+
+/**
  * Lambda 参数代理类型
  * 与普通 Proxify<T> 相同，但标记为 lambda 参数
  */
