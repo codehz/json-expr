@@ -10,8 +10,8 @@ import { BUILTIN_CONSTRUCTORS, PRECEDENCE, RIGHT_ASSOCIATIVE } from "./ast-types
  * 用于在嵌套 lambda 中分配唯一参数名
  */
 export interface GenerateContext {
-  /** lambda 参数计数器，用于生成唯一参数名 */
-  lambdaParamCounter: number;
+  /** 当前已使用的参数名集合（用于嵌套 lambda 时避免冲突） */
+  usedParamNames: Set<string>;
   /** 占位符 Symbol 到实际参数名的映射 */
   paramMapping: Map<symbol, string>;
 }
@@ -21,7 +21,7 @@ export interface GenerateContext {
  */
 export function createGenerateContext(): GenerateContext {
   return {
-    lambdaParamCounter: 0,
+    usedParamNames: new Set(),
     paramMapping: new Map(),
   };
 }
@@ -124,13 +124,21 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
       // 为每个参数分配唯一的参数名
       const paramNames: string[] = [];
       const placeholderIds: symbol[] = [];
+      const allocatedNames: string[] = [];
 
       for (const param of node.params) {
         if (param.type === "Placeholder") {
-          // Placeholder 参数：分配唯一名称并建立映射
-          const uniqueName = `_${ctx.lambdaParamCounter++}`;
+          // Placeholder 参数：分配一个在当前作用域中未使用的名称
+          let index = 0;
+          let uniqueName: string;
+          do {
+            uniqueName = `_${index++}`;
+          } while (ctx.usedParamNames.has(uniqueName));
+
           paramNames.push(uniqueName);
           placeholderIds.push(param.id);
+          allocatedNames.push(uniqueName);
+          ctx.usedParamNames.add(uniqueName);
           ctx.paramMapping.set(param.id, uniqueName);
         } else {
           // Identifier 参数：直接使用名称
@@ -144,9 +152,12 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
           ? `(${generateWithContext(node.body, ctx)})`
           : generateWithContext(node.body, ctx);
 
-      // 清理 Placeholder 参数映射
+      // 清理 Placeholder 参数映射和已使用名称（退出作用域）
       for (const id of placeholderIds) {
         ctx.paramMapping.delete(id);
+      }
+      for (const name of allocatedNames) {
+        ctx.usedParamNames.delete(name);
       }
 
       return `${paramsStr}=>${body}`;
