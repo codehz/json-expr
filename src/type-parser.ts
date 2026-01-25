@@ -1,4 +1,4 @@
-import type { Expression, Variable } from "./types";
+import type { Expression, ProxyExpression, Variable } from "./types";
 
 // ============================================================================
 // 工具类型
@@ -203,7 +203,14 @@ type ExtractIdentifiers<S extends string, Collected extends string = never> = S 
 // ============================================================================
 
 /** 从 Variable 或 Expression 提取值类型 */
-export type ExtractType<T> = T extends Variable<infer V> ? V : T extends Expression<unknown, infer R> ? R : never;
+export type ExtractType<T> =
+  T extends ProxyExpression<infer V>
+    ? V
+    : T extends Variable<infer V>
+      ? V
+      : T extends Expression<unknown, infer R>
+        ? R
+        : never;
 
 /** 从上下文对象构建类型映射 */
 export type ContextTypeMap<TContext> = {
@@ -676,9 +683,11 @@ export type InferTypeFromAST<AST, TypeMap> = AST extends ASTNumber
     : AST extends ASTBoolean
       ? boolean
       : AST extends ASTIdentifier<infer Name>
-        ? Name extends keyof TypeMap
-          ? TypeMap[Name]
-          : unknown
+        ? Name extends keyof GlobalTypeMap
+          ? GlobalTypeMap[Name]
+          : Name extends keyof TypeMap
+            ? TypeMap[Name]
+            : unknown
         : AST extends ASTUnary<infer Op, infer __Operand>
           ? InferUnaryType<Op, InferTypeFromAST<__Operand, TypeMap>>
           : AST extends ASTBinary<infer Op, infer Left, infer Right>
@@ -738,12 +747,31 @@ type InferBinaryType<Op extends string, Left, Right> = Op extends "+"
               : unknown;
 
 /** 成员访问类型推导 */
-type InferMemberType<Obj, Prop extends string> =
-  Obj extends Record<string, unknown> ? (Prop extends keyof Obj ? Obj[Prop] : unknown) : unknown;
+type InferMemberType<Obj, Prop extends string> = Prop extends keyof Obj ? Obj[Prop] : unknown;
 
 /** 函数调用类型推导 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type InferCallType<Callee> = Callee extends (...args: any[]) => infer R ? R : unknown;
+
+/** 全局类型映射 */
+interface GlobalTypeMap {
+  Math: Math;
+  JSON: JSON;
+  Number: NumberConstructor;
+  String: StringConstructor;
+  Boolean: BooleanConstructor;
+  Array: ArrayConstructor;
+  Object: ObjectConstructor;
+  Date: DateConstructor;
+  RegExp: RegExpConstructor;
+  undefined: undefined;
+  NaN: number;
+  Infinity: number;
+  parseInt: typeof globalThis.parseInt;
+  parseFloat: typeof globalThis.parseFloat;
+  isNaN: typeof globalThis.isNaN;
+  isFinite: typeof globalThis.isFinite;
+}
 
 // ============================================================================
 // 主要导出类型
