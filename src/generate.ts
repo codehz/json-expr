@@ -2,8 +2,8 @@
  * 代码生成逻辑
  */
 
-import type { ASTNode } from "./ast-types";
-import { BUILTIN_CONSTRUCTORS, PRECEDENCE, RIGHT_ASSOCIATIVE } from "./ast-types";
+import type { ASTNode } from "./ast-types.js";
+import { BUILTIN_CONSTRUCTORS, PRECEDENCE, RIGHT_ASSOCIATIVE } from "./ast-types.js";
 
 /**
  * 代码生成上下文
@@ -34,6 +34,10 @@ export function generate(node: ASTNode): string {
   return generateWithContext(node, ctx);
 }
 
+/** 需要空格分隔的关键字运算符 */
+const KEYWORD_BINARY_OPERATORS = new Set(["in", "instanceof"]);
+const KEYWORD_UNARY_OPERATORS = new Set(["typeof", "void"]);
+
 /**
  * 带上下文的代码生成
  */
@@ -43,7 +47,6 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
       return node.raw;
 
     case "StringLiteral":
-      // 使用双引号，转义必要的字符
       return JSON.stringify(node.value);
 
     case "BooleanLiteral":
@@ -55,34 +58,24 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
     case "Identifier":
       return node.name;
 
-    case "Placeholder": {
-      // 查找 lambda 参数映射
-      const mappedName = ctx.paramMapping.get(node.id);
-      if (mappedName) return mappedName;
-      // 未编译的占位符输出为特殊格式（用于测试/调试）
-      return `$$${node.id.description}$$`;
-    }
+    case "Placeholder":
+      return ctx.paramMapping.get(node.id) ?? `$$${node.id.description}$$`;
 
     case "BinaryExpr": {
       const left = wrapIfNeededWithContext(node.left, node, "left", ctx);
       const right = wrapIfNeededWithContext(node.right, node, "right", ctx);
-      // 关键字运算符需要空格
-      if (node.operator === "in" || node.operator === "instanceof") {
-        return `${left} ${node.operator} ${right}`;
-      }
-      return `${left}${node.operator}${right}`;
+      const sep = KEYWORD_BINARY_OPERATORS.has(node.operator) ? " " : "";
+      return `${left}${sep}${node.operator}${sep}${right}`;
     }
 
-    case "UnaryExpr":
-      if (node.prefix) {
-        const arg = wrapIfNeededWithContext(node.argument, node, "argument", ctx);
-        // 对于关键字运算符（typeof, void）需要空格
-        if (node.operator === "typeof" || node.operator === "void") {
-          return `${node.operator} ${arg}`;
-        }
-        return `${node.operator}${arg}`;
+    case "UnaryExpr": {
+      if (!node.prefix) {
+        return generateWithContext(node.argument, ctx) + node.operator;
       }
-      return generateWithContext(node.argument, ctx) + node.operator;
+      const arg = wrapIfNeededWithContext(node.argument, node, "argument", ctx);
+      const sep = KEYWORD_UNARY_OPERATORS.has(node.operator) ? " " : "";
+      return `${node.operator}${sep}${arg}`;
+    }
 
     case "ConditionalExpr": {
       const test = wrapIfNeededWithContext(node.test, node, "test", ctx);
@@ -94,16 +87,17 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
     case "MemberExpr": {
       const object = wrapIfNeededWithContext(node.object, node, "object", ctx);
       const property = generateWithContext(node.property, ctx);
-      return node.computed
-        ? `${object}${node.optional ? "?." : ""}[${property}]`
-        : `${object}${node.optional ? "?." : "."}${property}`;
+      const accessor = node.optional ? "?." : node.computed ? "" : ".";
+      return node.computed ? `${object}${accessor}[${property}]` : `${object}${accessor}${property}`;
     }
 
     case "CallExpr": {
       const callee = wrapIfNeededWithContext(node.callee, node, "callee", ctx);
       const args = node.arguments.map((arg) => generateWithContext(arg, ctx)).join(",");
       const isNew = node.callee.type === "Identifier" && BUILTIN_CONSTRUCTORS.has(node.callee.name);
-      return `${isNew ? "new " : ""}${callee}${node.optional ? "?." : ""}(${args})`;
+      const prefix = isNew ? "new " : "";
+      const optional = node.optional ? "?." : "";
+      return `${prefix}${callee}${optional}(${args})`;
     }
 
     case "ArrayExpr":
@@ -111,64 +105,72 @@ export function generateWithContext(node: ASTNode, ctx: GenerateContext): string
 
     case "ObjectExpr": {
       const props = node.properties.map((prop) => {
-        if (prop.shorthand) {
-          return generateWithContext(prop.key, ctx);
-        }
+        if (prop.shorthand) return generateWithContext(prop.key, ctx);
         const key = prop.computed ? `[${generateWithContext(prop.key, ctx)}]` : generateWithContext(prop.key, ctx);
         return `${key}:${generateWithContext(prop.value, ctx)}`;
       });
       return `{${props.join(",")}}`;
     }
 
-    case "ArrowFunctionExpr": {
-      // 为每个参数分配唯一的参数名
-      const paramNames: string[] = [];
-      const placeholderIds: symbol[] = [];
-      const allocatedNames: string[] = [];
-
-      for (const param of node.params) {
-        if (param.type === "Placeholder") {
-          // Placeholder 参数：分配一个在当前作用域中未使用的名称
-          let index = 0;
-          let uniqueName: string;
-          do {
-            uniqueName = `_${index++}`;
-          } while (ctx.usedParamNames.has(uniqueName));
-
-          paramNames.push(uniqueName);
-          placeholderIds.push(param.id);
-          allocatedNames.push(uniqueName);
-          ctx.usedParamNames.add(uniqueName);
-          ctx.paramMapping.set(param.id, uniqueName);
-        } else {
-          // Identifier 参数：直接使用名称
-          paramNames.push(param.name);
-        }
-      }
-
-      const paramsStr = paramNames.length === 1 ? paramNames[0]! : `(${paramNames.join(",")})`;
-      const body =
-        node.body.type === "ObjectExpr"
-          ? `(${generateWithContext(node.body, ctx)})`
-          : generateWithContext(node.body, ctx);
-
-      // 清理 Placeholder 参数映射和已使用名称（退出作用域）
-      for (const id of placeholderIds) {
-        ctx.paramMapping.delete(id);
-      }
-      for (const name of allocatedNames) {
-        ctx.usedParamNames.delete(name);
-      }
-
-      return `${paramsStr}=>${body}`;
-    }
+    case "ArrowFunctionExpr":
+      return generateArrowFunction(node, ctx);
 
     default: {
       const unknownNode = node as { type?: string };
-      const nodeType = unknownNode.type ?? "unknown";
-      throw new Error(`Unknown node type: ${nodeType}`);
+      throw new Error(`Unknown node type: ${unknownNode.type ?? "unknown"}`);
     }
   }
+}
+
+/**
+ * 生成箭头函数代码
+ * 为 Placeholder 参数分配唯一名称，避免嵌套 lambda 冲突
+ */
+function generateArrowFunction(
+  node: {
+    type: "ArrowFunctionExpr";
+    params: ({ type: "Identifier"; name: string } | { type: "Placeholder"; id: symbol })[];
+    body: ASTNode;
+  },
+  ctx: GenerateContext
+): string {
+  const allocatedParams: { id: symbol; name: string }[] = [];
+  const paramNames: string[] = [];
+
+  for (const param of node.params) {
+    if (param.type === "Identifier") {
+      paramNames.push(param.name);
+    } else {
+      const name = allocateUniqueName(ctx.usedParamNames);
+      paramNames.push(name);
+      allocatedParams.push({ id: param.id, name });
+      ctx.usedParamNames.add(name);
+      ctx.paramMapping.set(param.id, name);
+    }
+  }
+
+  const paramsStr = paramNames.length === 1 ? paramNames[0]! : `(${paramNames.join(",")})`;
+  const bodyStr =
+    node.body.type === "ObjectExpr" ? `(${generateWithContext(node.body, ctx)})` : generateWithContext(node.body, ctx);
+
+  // 清理分配的参数名（退出作用域）
+  for (const { id, name } of allocatedParams) {
+    ctx.paramMapping.delete(id);
+    ctx.usedParamNames.delete(name);
+  }
+
+  return `${paramsStr}=>${bodyStr}`;
+}
+
+/**
+ * 分配一个未使用的参数名 (_0, _1, _2, ...)
+ */
+function allocateUniqueName(usedNames: Set<string>): string {
+  let index = 0;
+  while (usedNames.has(`_${index}`)) {
+    index++;
+  }
+  return `_${index}`;
 }
 
 /**
@@ -397,75 +399,95 @@ export function transformPlaceholders(node: ASTNode, transform: (id: symbol) => 
 }
 
 /**
- * 收集 AST 中所有使用的标识符名称
+ * 收集 AST 中所有使用的标识符名称（自由变量）
  */
 export function collectIdentifiers(node: ASTNode): Set<string> {
-  const identifiers = new Set<string>();
+  switch (node.type) {
+    case "Identifier":
+      return new Set([node.name]);
 
-  function visit(n: ASTNode): void {
-    switch (n.type) {
-      case "Identifier":
-        identifiers.add(n.name);
-        break;
+    case "BinaryExpr":
+      return union(collectIdentifiers(node.left), collectIdentifiers(node.right));
 
-      case "BinaryExpr":
-        visit(n.left);
-        visit(n.right);
-        break;
+    case "UnaryExpr":
+      return collectIdentifiers(node.argument);
 
-      case "UnaryExpr":
-        visit(n.argument);
-        break;
+    case "ConditionalExpr":
+      return union(
+        collectIdentifiers(node.test),
+        collectIdentifiers(node.consequent),
+        collectIdentifiers(node.alternate)
+      );
 
-      case "ConditionalExpr":
-        visit(n.test);
-        visit(n.consequent);
-        visit(n.alternate);
-        break;
-
-      case "MemberExpr":
-        visit(n.object);
-        if (n.computed) {
-          visit(n.property);
+    case "MemberExpr": {
+      const result = collectIdentifiers(node.object);
+      if (node.computed) {
+        for (const id of collectIdentifiers(node.property)) {
+          result.add(id);
         }
-        break;
-
-      case "CallExpr":
-        visit(n.callee);
-        n.arguments.forEach(visit);
-        break;
-
-      case "ArrayExpr":
-        n.elements.forEach(visit);
-        break;
-
-      case "ObjectExpr":
-        n.properties.forEach((prop) => {
-          if (prop.computed) {
-            visit(prop.key);
-          }
-          visit(prop.value);
-        });
-        break;
-
-      case "ArrowFunctionExpr": {
-        // 箭头函数：收集参数名和函数体中的标识符
-        // 但从闭包角度，只需收集非参数的自由变量
-        // 只考虑 Identifier 参数，Placeholder 参数在编译时处理
-        const paramNames = new Set(
-          n.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
-        );
-        const bodyIdentifiers = collectIdentifiers(n.body);
-        for (const id of bodyIdentifiers) {
-          if (!paramNames.has(id)) {
-            identifiers.add(id);
-          }
-        }
-        break;
       }
+      return result;
+    }
+
+    case "CallExpr": {
+      const result = collectIdentifiers(node.callee);
+      for (const arg of node.arguments) {
+        for (const id of collectIdentifiers(arg)) {
+          result.add(id);
+        }
+      }
+      return result;
+    }
+
+    case "ArrayExpr": {
+      const result = new Set<string>();
+      for (const el of node.elements) {
+        for (const id of collectIdentifiers(el)) {
+          result.add(id);
+        }
+      }
+      return result;
+    }
+
+    case "ObjectExpr": {
+      const result = new Set<string>();
+      for (const prop of node.properties) {
+        if (prop.computed) {
+          for (const id of collectIdentifiers(prop.key)) {
+            result.add(id);
+          }
+        }
+        for (const id of collectIdentifiers(prop.value)) {
+          result.add(id);
+        }
+      }
+      return result;
+    }
+
+    case "ArrowFunctionExpr": {
+      // 收集自由变量：函数体中的标识符，排除参数名
+      const paramNames = new Set(
+        node.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
+      );
+      const bodyIds = collectIdentifiers(node.body);
+      for (const name of paramNames) {
+        bodyIds.delete(name);
+      }
+      return bodyIds;
+    }
+
+    default:
+      return new Set();
+  }
+}
+
+/** 合并多个 Set */
+function union<T>(...sets: Set<T>[]): Set<T> {
+  const result = new Set<T>();
+  for (const s of sets) {
+    for (const item of s) {
+      result.add(item);
     }
   }
-
-  visit(node);
-  return identifiers;
+  return result;
 }
