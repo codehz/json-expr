@@ -312,12 +312,3 @@ export type InferLambdaArgs<L> = L extends Lambda<infer Args, unknown> ? Args : 
  * 从 Lambda 类型提取返回类型
  */
 export type InferLambdaReturn<L> = L extends Lambda<unknown[], infer R> ? R : never;
-
-/**
- * 常用 Lambda 类型别名
- */
-export type MapCallback<T, R> = Lambda<[T, number, T[]], R>;
-export type FilterCallback<T> = Lambda<[T, number, T[]], boolean>;
-export type ReduceCallback<T, R> = Lambda<[R, T, number, T[]], R>;
-export type FindCallback<T> = Lambda<[T, number, T[]], boolean>;
-export type SortCallback<T> = Lambda<[T, T], number>;
