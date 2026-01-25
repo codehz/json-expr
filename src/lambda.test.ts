@@ -270,6 +270,400 @@ describe("lambda 函数", () => {
   });
 });
 
+describe("嵌套 lambda", () => {
+  describe("基础嵌套", () => {
+    test("嵌套 map", () => {
+      const matrix = variable<number[][]>();
+      const doubled = matrix.map(
+        lambda<[number[]], number[]>((row) => row.map(lambda<[number], number>((n) => expr({ n })("n * 2"))))
+      );
+
+      const compiled = compile(doubled, { matrix });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+      });
+      expect(result).toEqual([
+        [2, 4],
+        [6, 8],
+      ]);
+    });
+
+    test("外层 map 内层 filter", () => {
+      const matrix = variable<number[][]>();
+      const filtered = matrix.map(
+        lambda<[number[]], number[]>((row) => row.filter(lambda<[number], boolean>((n) => expr({ n })("n > 2"))))
+      );
+
+      const compiled = compile(filtered, { matrix });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+      });
+      expect(result).toEqual([[3], [4, 5, 6]]);
+    });
+
+    test("外层 map 内层 reduce", () => {
+      const matrix = variable<number[][]>();
+      const sums = matrix.map(
+        lambda<[number[]], number>((row) =>
+          row.reduce(
+            lambda<[number, number], number>((acc, val) => expr({ acc, val })("acc + val")),
+            0
+          )
+        )
+      );
+
+      const compiled = compile(sums, { matrix });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+      });
+      expect(result).toEqual([6, 15]);
+    });
+  });
+
+  describe("嵌套 lambda 捕获外部变量", () => {
+    test("内层 lambda 捕获全局变量", () => {
+      const matrix = variable<number[][]>();
+      const multiplier = variable<number>();
+      const scaled = matrix.map(
+        lambda<[number[]], number[]>((row) =>
+          row.map(lambda<[number], number>((n) => expr({ n, multiplier })("n * multiplier")))
+        )
+      );
+
+      const compiled = compile(scaled, { matrix, multiplier });
+      expect(compiled[0]).toContain("matrix");
+      expect(compiled[0]).toContain("multiplier");
+
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+        multiplier: 10,
+      });
+      expect(result).toEqual([
+        [10, 20],
+        [30, 40],
+      ]);
+    });
+
+    test("内层 lambda 捕获外层 lambda 参数", () => {
+      const matrix = variable<number[][]>();
+      const indexed = matrix.map(
+        lambda<[number[], number], number[]>((row, rowIndex) =>
+          row.map(lambda<[number], number>((n) => expr({ n, rowIndex })("n + rowIndex * 10")))
+        )
+      );
+
+      const compiled = compile(indexed, { matrix });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+      });
+      expect(result).toEqual([
+        [1, 2], // rowIndex=0: 1+0, 2+0
+        [13, 14], // rowIndex=1: 3+10, 4+10
+      ]);
+    });
+
+    test("内层 lambda 同时捕获外层参数和全局变量", () => {
+      const matrix = variable<number[][]>();
+      const baseOffset = variable<number>();
+      const indexed = matrix.map(
+        lambda<[number[], number], number[]>((row, rowIndex) =>
+          row.map(lambda<[number], number>((n) => expr({ n, rowIndex, baseOffset })("n + rowIndex * 10 + baseOffset")))
+        )
+      );
+
+      const compiled = compile(indexed, { matrix, baseOffset });
+      expect(compiled[0]).toContain("matrix");
+      expect(compiled[0]).toContain("baseOffset");
+
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+        baseOffset: 100,
+      });
+      expect(result).toEqual([
+        [101, 102], // rowIndex=0: 1+0+100, 2+0+100
+        [113, 114], // rowIndex=1: 3+10+100, 4+10+100
+      ]);
+    });
+
+    test("多层嵌套捕获", () => {
+      const cube = variable<number[][][]>();
+      const multiplier = variable<number>();
+      const processed = cube.map(
+        lambda<[number[][]], number[][]>((plane) =>
+          plane.map(
+            lambda<[number[]], number[]>((row) =>
+              row.map(lambda<[number], number>((n) => expr({ n, multiplier })("n * multiplier")))
+            )
+          )
+        )
+      );
+
+      const compiled = compile(processed, { cube, multiplier });
+      const result = evaluate(compiled, {
+        cube: [
+          [
+            [1, 2],
+            [3, 4],
+          ],
+        ],
+        multiplier: 2,
+      });
+      expect(result).toEqual([
+        [
+          [2, 4],
+          [6, 8],
+        ],
+      ]);
+    });
+
+    test("外层 lambda 使用不同数量参数避免冲突", () => {
+      // 内层 lambda 使用单参数，外层使用双参数，通过不同参数数量避免命名冲突
+      const matrix = variable<number[][]>();
+      const processed = matrix.map(
+        lambda<[number[], number], number[]>((row, rowIdx) =>
+          row.map(lambda<[number], number>((val) => expr({ val, rowIdx })("val + rowIdx * 100")))
+        )
+      );
+
+      const compiled = compile(processed, { matrix });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+      });
+      // row 0: 1+0=1, 2+0=2, 3+0=3
+      // row 1: 4+100=104, 5+100=105, 6+100=106
+      expect(result).toEqual([
+        [1, 2, 3],
+        [104, 105, 106],
+      ]);
+    });
+
+    test("内层 lambda 捕获外层参数进行 reduce", () => {
+      const groups = variable<{ name: string; values: number[] }[]>();
+      const totals = groups.map(
+        lambda<[{ name: string; values: number[] }], { name: string; total: number }>((group) => ({
+          name: group.name,
+          total: group.values.reduce(
+            lambda<[number, number], number>((acc, val) => expr({ acc, val })("acc + val")),
+            0
+          ),
+        }))
+      );
+
+      const compiled = compile(totals, { groups });
+      const result = evaluate(compiled, {
+        groups: [
+          { name: "A", values: [1, 2, 3] },
+          { name: "B", values: [4, 5, 6] },
+        ],
+      });
+      expect(result).toEqual([
+        { name: "A", total: 6 },
+        { name: "B", total: 15 },
+      ]);
+    });
+  });
+
+  describe("复杂嵌套场景", () => {
+    test("嵌套 lambda 链式调用", () => {
+      const matrix = variable<number[][]>();
+      const threshold = variable<number>();
+      const processed = matrix.map(
+        lambda<[number[]], number[]>((row) =>
+          row
+            .filter(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")))
+            .map(lambda<[number], number>((n) => expr({ n })("n * 2")))
+        )
+      );
+
+      const compiled = compile(processed, { matrix, threshold });
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 5, 3],
+          [8, 2, 7],
+        ],
+        threshold: 3,
+      });
+      expect(result).toEqual([
+        [10], // [5] * 2
+        [16, 14], // [8, 7] * 2
+      ]);
+    });
+
+    test("flatMap 模拟", () => {
+      const groups = variable<number[][]>();
+      const offset = variable<number>();
+      const flattened = groups.reduce(
+        lambda<[number[], number[]], number[]>((acc, group) =>
+          acc.concat(group.map(lambda<[number], number>((n) => expr({ n, offset })("n + offset"))))
+        ),
+        [] as number[]
+      );
+
+      const compiled = compile(flattened, { groups, offset });
+      const result = evaluate(compiled, {
+        groups: [
+          [1, 2],
+          [3, 4],
+        ],
+        offset: 10,
+      });
+      expect(result).toEqual([11, 12, 13, 14]);
+    });
+
+    test("嵌套 some/every", () => {
+      const matrix = variable<number[][]>();
+      const threshold = variable<number>();
+
+      // 检查是否所有行都有至少一个大于阈值的元素
+      const allRowsHaveLarge = matrix.every(
+        lambda<[number[]], boolean>((row) =>
+          row.some(lambda<[number], boolean>((n) => expr({ n, threshold })("n > threshold")))
+        )
+      );
+
+      const compiled = compile(allRowsHaveLarge, { matrix, threshold });
+      expect(
+        evaluate<boolean>(compiled, {
+          matrix: [
+            [1, 5, 2],
+            [3, 8, 1],
+          ],
+          threshold: 4,
+        })
+      ).toBe(true);
+      expect(
+        evaluate<boolean>(compiled, {
+          matrix: [
+            [1, 2, 3],
+            [4, 5, 6],
+          ],
+          threshold: 10,
+        })
+      ).toBe(false);
+    });
+
+    test("嵌套 find", () => {
+      const data = variable<{ id: number; children: { name: string; active: boolean }[] }[]>();
+      const firstActiveChild = data.map(
+        lambda<
+          [{ id: number; children: { name: string; active: boolean }[] }],
+          { name: string; active: boolean } | undefined
+        >((parent) =>
+          parent.children.find(lambda<[{ name: string; active: boolean }], boolean>((child) => child.active))
+        )
+      );
+
+      const compiled = compile(firstActiveChild, { data });
+      const result = evaluate(compiled, {
+        data: [
+          {
+            id: 1,
+            children: [
+              { name: "a", active: false },
+              { name: "b", active: true },
+            ],
+          },
+          {
+            id: 2,
+            children: [
+              { name: "c", active: true },
+              { name: "d", active: false },
+            ],
+          },
+        ],
+      });
+      expect(result).toEqual([
+        { name: "b", active: true },
+        { name: "c", active: true },
+      ]);
+    });
+  });
+
+  describe("已知限制", () => {
+    test("相同参数数量的嵌套 lambda 会发生参数名冲突", () => {
+      // 当内外层 lambda 参数数量相同时，参数名会冲突（都是 _0, _1 等）
+      // 这是当前实现的已知限制
+      const matrix = variable<number[][]>();
+      const processed = matrix.map(
+        lambda<[number[], number], number[]>((row, rowIdx) =>
+          row.map(
+            lambda<[number, number], number>((val, colIdx) =>
+              // rowIdx 在编译后会变成内层的 _1 (即 colIdx)，导致结果不符预期
+              expr({ val, rowIdx, colIdx })("val + rowIdx * 100 + colIdx")
+            )
+          )
+        )
+      );
+
+      const compiled = compile(processed, { matrix });
+      // 编译结果: $0.map((_0,_1)=>_0.map((_0,_1)=>_0+_1*100+_1))
+      // 内层的 _1 覆盖了外层的 _1，所以 rowIdx 实际上是 colIdx
+      expect(compiled[1]).toContain("(_0,_1)=>_0.map((_0,_1)=>");
+
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+      });
+      // 实际计算: val + colIdx * 100 + colIdx = val + colIdx * 101
+      // 而非预期的: val + rowIdx * 100 + colIdx
+      expect(result).toEqual([
+        [1, 103, 205], // 1+0*101, 2+1*101, 3+2*101
+        [4, 106, 208], // 4+0*101, 5+1*101, 6+2*101
+      ]);
+    });
+
+    test("workaround: 使用不同参数数量避免冲突", () => {
+      // 解决方案：确保内外层 lambda 使用不同数量的参数
+      const matrix = variable<number[][]>();
+      const processed = matrix.map(
+        lambda<[number[], number], number[]>((row, rowIdx) =>
+          // 内层只用一个参数，外层用两个参数，避免 _1 冲突
+          row.map(lambda<[number], number>((val) => expr({ val, rowIdx })("val + rowIdx * 100")))
+        )
+      );
+
+      const compiled = compile(processed, { matrix });
+      // 编译结果: $0.map((_0,_1)=>_0.map(_0=>_0+_1*100))
+      // 内层只有 _0，外层的 _1 不会被覆盖
+      expect(compiled[1]).toContain("(_0,_1)=>_0.map(_0=>");
+
+      const result = evaluate(compiled, {
+        matrix: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+      });
+      expect(result).toEqual([
+        [1, 2, 3],
+        [104, 105, 106],
+      ]);
+    });
+  });
+});
+
 describe("parser 箭头函数支持", () => {
   test("解析单参数箭头函数", () => {
     const numbers = variable<number[]>();
