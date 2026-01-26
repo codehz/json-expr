@@ -138,7 +138,7 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
 
   translateRange(0, expressions.length);
 
-  lines.push("return $values[$values.length - 1];");
+  lines.push("return $lastValue;");
   return lines.join("\n");
 }
 
