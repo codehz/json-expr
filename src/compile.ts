@@ -70,7 +70,7 @@ export interface CompileOptions {}
 export function compile<TResult>(
   expression: ExprValue<TResult>,
   variables: Record<string, unknown>,
-  options: CompileOptions = {}
+  _options: CompileOptions = {}
 ): CompiledData {
   const ast = serializeArgumentToAST(expression);
 
