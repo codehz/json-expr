@@ -37,16 +37,7 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
     }
   }
 
-  const lines: string[] = [
-    // 初始化变量
-    ...Array.from({ length: variableCount }, (_, i) => `const $${i} = $values[${i}];`),
-    "let $lastValue;",
-  ];
-
-  // 预先声明所有中间变量
-  for (let i = 0; i < expressions.length; i++) {
-    lines.push(`let $${variableCount + i};`);
-  }
+  const lines: string[] = ["let $lastValue;"];
 
   // 追踪已处理过的指令索引
   const processed = new Set<number>();
@@ -66,8 +57,7 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
       if (typeof expr === "string") {
         // 普通表达式
         processed.add(i);
-        lines.push(`${indent}$${varIdx} = $lastValue = ${expr};`);
-        lines.push(`${indent}$values[${varIdx}] = $${varIdx};`);
+        lines.push(`${indent}$[${varIdx}] = $lastValue = ${expr};`);
         i++;
       } else if (!Array.isArray(expr)) {
         i++;
@@ -119,8 +109,7 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
         } else if (type === "phi") {
           // Phi 节点：取最近的值
           processed.add(i);
-          lines.push(`${indent}$${varIdx} = $lastValue;`);
-          lines.push(`${indent}$values[${varIdx}] = $${varIdx};`);
+          lines.push(`${indent}$[${varIdx}] = $lastValue;`);
           i++;
         } else if (type === "jmp") {
           // jmp 不应该单独出现，应该已被 br 处理
@@ -154,7 +143,7 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
  *
  * @example
  * ```ts
- * const compiled = [["x", "y"], "$0+$1", "$1*2"]
+ * const compiled = [["x", "y"], "$[0]+$[1]", "$[1]*2"]
  * const result = evaluate<number>(compiled, { x: 2, y: 3 })
  * // => 6  (3 * 2)
  * ```
@@ -194,7 +183,7 @@ export function evaluate<TResult = unknown>(data: CompiledData, values: Record<s
     // 默认使用 V2 格式的函数体构造器
     const functionBody = buildEvaluatorFunctionBodyV2(expressions, variableNames.length);
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    evaluator = new Function("$values", functionBody) as (values: unknown[]) => unknown;
+    evaluator = new Function("$", functionBody) as (values: unknown[]) => unknown;
     evaluatorCache.set(cacheKey, evaluator);
   }
 

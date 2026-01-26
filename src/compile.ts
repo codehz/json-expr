@@ -64,7 +64,7 @@ export interface CompileOptions {}
  * const sum = expr({ x, y })("x + y")
  * const result = expr({ sum, x })("sum * x")
  * const compiled = compile(result, { x, y })
- * // => [["x", "y"], "($0+$1)*$0"]
+ * // => [["x", "y"], "($[0]+$[1])*$[0]"]
  * ```
  */
 export function compile<TResult>(
@@ -90,24 +90,24 @@ export function compile<TResult>(
     }
   }
 
-  // 第一步：转换 Placeholder 节点为 $N 格式的 Identifier
+  // 第一步：转换 Placeholder 节点为 $[N] 格式的 Identifier
   // lambda 参数的 Placeholder 保留不转换（返回 null）
   const placeholderTransformed = transformPlaceholders(ast, (id) => {
     const name = symbolToName.get(id);
     if (!name) return null; // 不是变量占位符（可能是 lambda 参数），保留
     const index = variableToIndex.get(name);
     if (index === undefined) return null;
-    return `$${index}`;
+    return `$[${index}]`;
   });
 
   // 第二步：检查是否有未定义的 Identifier（非全局对象）
   const undefinedVars: string[] = [];
   const transformed = transformIdentifiers(placeholderTransformed, (name) => {
-    // 已经转换为 $N 的跳过
-    if (name.startsWith("$") && /^\$\d+$/.test(name)) return name;
+    // 已经转换为 $[N] 的跳过
+    if (name.startsWith("$[") && /^\$\[\d+\]$/.test(name)) return name;
 
     const index = variableToIndex.get(name);
-    if (index !== undefined) return `$${index}`;
+    if (index !== undefined) return `$[${index}]`;
 
     if (!ALLOWED_GLOBALS.has(name)) undefinedVars.push(name);
     return name;
@@ -138,9 +138,9 @@ export function compile<TResult>(
     const leftIdx = compileAst(node.left);
 
     const branchConditions: Record<string, string> = {
-      "||": `$${leftIdx}`,
-      "&&": `!$${leftIdx}`,
-      "??": `$${leftIdx}!=null`,
+      "||": `$[${leftIdx}]`,
+      "&&": `!$[${leftIdx}]`,
+      "??": `$[${leftIdx}]!=null`,
     };
 
     const branchIdx = expressions.length;
@@ -161,7 +161,7 @@ export function compile<TResult>(
     const testIdx = compileAst(node.test);
 
     const branchIdx = expressions.length;
-    expressions.push(["br", `$${testIdx}`, 0] as BranchNode);
+    expressions.push(["br", `$[${testIdx}]`, 0] as BranchNode);
     nextIndex++;
 
     compileAst(node.alternate);

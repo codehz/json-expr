@@ -406,12 +406,12 @@ describe("短路求值测试", () => {
       const result = expr({ a, b })("a || b");
       const compiled = compile(result, { a, b });
 
-      // 应该生成: $0, ["br", "$2", 1], $1, ["phi"]
-      // 偏移量为 1，因为只需跳过 $1 一条指令
+      // 应该生成: $[0], ["br", "$[2]", 1], $[1], ["phi"]
+      // 偏移量为 1，因为只需跳过 $[1] 一条指令
       expect(compiled[0]).toEqual(["a", "b"]);
-      expect(compiled[1]).toBe("$0"); // 左操作数
-      expect(compiled[2]).toEqual(["br", "$2", 1]); // 如果 $2 为 true，跳过 1 条
-      expect(compiled[3]).toBe("$1"); // 右操作数
+      expect(compiled[1]).toBe("$[0]"); // 左操作数
+      expect(compiled[2]).toEqual(["br", "$[2]", 1]); // 如果 $[2] 为 true，跳过 1 条
+      expect(compiled[3]).toBe("$[1]"); // 右操作数
       expect(compiled[4]).toEqual(["phi"]); // phi 节点
     });
 
@@ -423,9 +423,9 @@ describe("短路求值测试", () => {
       const compiled = compile(result, { a, b });
 
       expect(compiled[0]).toEqual(["a", "b"]);
-      expect(compiled[1]).toBe("$0");
-      expect(compiled[2]).toEqual(["br", "!$2", 1]); // 如果 !$2 为 true，跳过 1 条
-      expect(compiled[3]).toBe("$1");
+      expect(compiled[1]).toBe("$[0]");
+      expect(compiled[2]).toEqual(["br", "!$[2]", 1]); // 如果 !$[2] 为 true，跳过 1 条
+      expect(compiled[3]).toBe("$[1]");
       expect(compiled[4]).toEqual(["phi"]);
     });
 
@@ -437,9 +437,9 @@ describe("短路求值测试", () => {
       const compiled = compile(result, { a, b });
 
       expect(compiled[0]).toEqual(["a", "b"]);
-      expect(compiled[1]).toBe("$0");
-      expect(compiled[2]).toEqual(["br", "$2!=null", 1]); // 如果非 null，跳过 1 条
-      expect(compiled[3]).toBe("$1");
+      expect(compiled[1]).toBe("$[0]");
+      expect(compiled[2]).toEqual(["br", "$[2]!=null", 1]); // 如果非 null，跳过 1 条
+      expect(compiled[3]).toBe("$[1]");
       expect(compiled[4]).toEqual(["phi"]);
     });
 
@@ -451,9 +451,9 @@ describe("短路求值测试", () => {
       const result = expr({ cond, x, y })("cond ? x : y");
       const compiled = compile(result, { cond, x, y });
 
-      // 结构: $0 (cond), ["br", "$3", offset], $2 (else), ["jmp", offset], $1 (then), ["phi"]
+      // 结构: $[0] (cond), ["br", "$[3]", offset], $[2] (else), ["jmp", offset], $[1] (then), ["phi"]
       expect(compiled[0]).toEqual(["cond", "x", "y"]);
-      expect(compiled[1]).toBe("$0"); // 条件
+      expect(compiled[1]).toBe("$[0]"); // 条件
       expect(compiled[2]![0]).toBe("br"); // 条件跳转
       expect(compiled[4]![0]).toBe("jmp"); // 无条件跳转
       expect(compiled[compiled.length - 1]).toEqual(["phi"]); // phi 节点

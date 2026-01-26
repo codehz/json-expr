@@ -185,8 +185,8 @@ describe("parser 单元测试", () => {
     test("使用映射", () => {
       const ast = parse("a + b * 2");
       const mapping: Record<string, number> = { a: 0, b: 1 };
-      const transformed = transformIdentifiers(ast, (name) => (name in mapping ? `$${mapping[name]}` : name));
-      expect(generate(transformed)).toBe("$0+$1*2");
+      const transformed = transformIdentifiers(ast, (name) => (name in mapping ? `$[${mapping[name]}]` : name));
+      expect(generate(transformed)).toBe("$[0]+$[1]*2");
     });
 
     test("成员访问保留属性名", () => {

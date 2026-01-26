@@ -671,7 +671,7 @@ describe("嵌套 lambda", () => {
       );
 
       const compiled = compile(processed, { matrix });
-      // 编译结果: $0.map((_0,_1)=>_0.map(_2=>_2+_1*100))
+      // 编译结果: $[0].map((_0,_1)=>_0.map(_2=>_2+_1*100))
       expect(compiled[1]).toContain("(_0,_1)=>_0.map(_2=>");
 
       const result = evaluate(compiled, {

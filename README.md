@@ -41,7 +41,7 @@ const result = expr({ sum, product })("sum + product");
 
 // 编译表达式（可序列化为 JSON）
 const compiled = compile(result, { x, y });
-// => [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+// => [["x", "y"], "$[0]+$[1]", "$[0]*$[1]", "$[2]+$[3]"]
 
 // 执行编译后的表达式
 const value = evaluate(compiled, { x: 2, y: 3 });
@@ -102,7 +102,7 @@ const array = expr({ x, y })("[x, y].filter(v => v > 0)");
 // 其中 $N 用于引用之前的变量或表达式
 
 const compiled = compile(result, { x, y });
-// [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+// [["x", "y"], "$[0]+$[1]", "$[0]*$[1]", "$[2]+$[3]"]
 ```
 
 ## API 参考
@@ -169,11 +169,11 @@ const product = expr({ x, y })("x * y");
 const result = expr({ sum, product })("sum + product");
 
 const compiled = compile(result, { x, y });
-// [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+// [["x", "y"], "$[0]+$[1]", "$[0]*$[1]", "$[2]+$[3]"]
 
 // 禁用内联优化
 const noInline = compile(result, { x, y }, { inline: false });
-// [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+// [["x", "y"], "$[0]+$[1]", "$[0]*$[1]", "$[2]+$[3]"]
 ```
 
 ### `evaluate<TResult>(data: CompiledData, values: Record<string, unknown>): TResult`
@@ -600,7 +600,7 @@ const compiled = compile(orExpr, { a, b });
 
 // 当 a 为 true 时，b 不会被求值
 // 编译数据包含控制流节点：
-// [["a", "b"], ["br", "$0", 1], "$1", ["phi"]]
+// [["a", "b"], ["br", "$[0]", 1], "$[1]", ["phi"]]
 
 // 空值合并
 const x = variable<number | null>();
@@ -627,8 +627,8 @@ const product = expr({ x, y })("x * y");
 const result = expr({ sum, product })("sum + product");
 
 // 自动内联后，编译结果为：
-// [["x", "y"], "($0+$1)+($0*$1)"]
-// 而不是 [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
+// [["x", "y"], "($[0]+$[1])+($[0]*$[1])"]
+// 而不是 [["x", "y"], "$[0]+$[1]", "$[0]*$[1]", "$[2]+$[3]"]
 
 const compiled = compile(result, { x, y });
 const value = evaluate(compiled, { x: 2, y: 3 });
@@ -665,7 +665,7 @@ const compiled = compile(result, { x, y });
 
 // 序列化
 const json = JSON.stringify(compiled);
-// "[["x","y"],"$0+$1","$0*$1","$2+$3"]"
+// "[["x","y"],"$[0]+$[1]","$[0]*$[1]","$[2]+$[3]"]"
 
 // 存储或传输...
 
@@ -688,8 +688,8 @@ const sum = expr({ x, y })("x + y");
 const compiled = compile(sum, { x, y });
 
 // 输出
-// [["x", "y"], "$0+$1"]
-//  $0 引用 x，$1 引用 y
+// [["x", "y"], "$[0]+$[1]"]
+//  $[0] 引用 x，$[1] 引用 y
 ```
 
 ### V2 格式（控制流节点）
@@ -704,8 +704,8 @@ const compiled = compile(result, { a, b });
 // 输出
 // [
 //   ["a", "b"],
-//   ["br", "$0", 1],  // 如果 $0 为 truthy，跳过 1 条指令
-//   "$1",             // 否则求值 $1
+//   ["br", "$[0]", 1],  // 如果 $[0] 为 truthy，跳过 1 条指令
+//   "$[1]",             // 否则求值 $[1]
 //   ["phi"]           // 取最近求值结果
 // ]
 ```
@@ -736,7 +736,7 @@ const xy = variable<number>();
 const conflict = expr({ xy, x })("xy + x");
 // 正确处理：编译器能区分 xy 和 x
 const compiled = compile(conflict, { xy, x });
-// => [["xy", "x"], "$0+$1"]
+// => [["xy", "x"], "$[0]+$[1]"]
 ```
 
 ### 运行时错误

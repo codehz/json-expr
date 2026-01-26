@@ -22,8 +22,8 @@ describe("compile 单元测试", () => {
       const sum = expr({ x, y })("x + y");
       const result = compile(sum, { x, y });
 
-      // 变量被替换为 $0, $1 等
-      expect(result[1]).toBe("$0+$1");
+      // 变量被替换为 $[0], $[1] 等
+      expect(result[1]).toBe("$[0]+$[1]");
     });
 
     test("变量顺序与声明顺序一致", () => {
@@ -46,7 +46,7 @@ describe("compile 单元测试", () => {
       const result = compile(e, { xy, x });
 
       expect(result[0]).toEqual(["xy", "x"]);
-      expect(result[1]).toBe("$0+$1");
+      expect(result[1]).toBe("$[0]+$[1]");
     });
   });
 
@@ -90,7 +90,7 @@ describe("compile 单元测试", () => {
       const result = compile(e, { x, y });
 
       // 输出应该是规范化的
-      expect(result[1]).toBe("$0+$1*2");
+      expect(result[1]).toBe("$[0]+$[1]*2");
     });
 
     test("保留必要的括号", () => {
@@ -101,7 +101,7 @@ describe("compile 单元测试", () => {
       const result = compile(e, { x, y });
 
       // 括号应该被保留以保持正确的运算顺序
-      expect(result[1]).toBe("($0+$1)*2");
+      expect(result[1]).toBe("($[0]+$[1])*2");
     });
   });
 
@@ -114,7 +114,7 @@ describe("compile 单元测试", () => {
       const result = compile({ sum, x, constant: 1 }, { x, y });
 
       expect(result[0]).toEqual(["x", "y"]);
-      expect(result[1]).toBe("{sum:$0+$1,x:$0,constant:1}");
+      expect(result[1]).toBe("{sum:$[0]+$[1],x:$[0],constant:1}");
     });
 
     test("支持数组中包含 Proxy", () => {
@@ -122,7 +122,7 @@ describe("compile 单元测试", () => {
       const result = compile([x, x.at(0), 42], { x });
 
       expect(result[0]).toEqual(["x"]);
-      expect(result[1]).toBe("[$0,$0.at(0),42]");
+      expect(result[1]).toBe("[$[0],$[0].at(0),42]");
     });
 
     test("支持直接传入 root variable", () => {
@@ -130,7 +130,7 @@ describe("compile 单元测试", () => {
       const result = compile(x, { x });
 
       expect(result[0]).toEqual(["x"]);
-      expect(result[1]).toBe("$0");
+      expect(result[1]).toBe("$[0]");
     });
 
     test("支持原始值", () => {
