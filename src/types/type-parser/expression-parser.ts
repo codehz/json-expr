@@ -1,0 +1,498 @@
+import type {
+  ASTArray,
+  ASTBinary,
+  ASTBoolean,
+  ASTCall,
+  ASTComputedMember,
+  ASTIdentifier,
+  ASTMemberAccess,
+  ASTNumber,
+  ASTObject,
+  ASTParen,
+  ASTString,
+  ASTTernary,
+  ASTUnary,
+  ASTUnknown,
+  ParseError,
+  ParseResult,
+} from "./ast-types";
+import type { ParseIdentifier, SkipDoubleQuoteString, SkipSingleQuoteString, SkipTemplateString } from "./identifiers";
+import type { IsDigit, IsIdentifierChar, IsIdentifierStart, TrimStart } from "./utils";
+
+// ============================================================================
+// 基础解析器 - 字面量
+// ============================================================================
+
+/** 解析数字字面量，返回 [数字字符串, 剩余] */
+type ParseNumberLiteral<S extends string, Acc extends string = ""> = S extends `${infer C}${infer Rest}`
+  ? C extends "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "."
+    ? ParseNumberLiteral<Rest, `${Acc}${C}`>
+    : [Acc, S]
+  : [Acc, S];
+
+/** 解析字符串字面量 */
+type ParseStringLiteral<S extends string> = S extends `'${infer __}`
+  ? { rest: SkipSingleQuoteString<S> }
+  : S extends `"${infer __}`
+    ? { rest: SkipDoubleQuoteString<S> }
+    : S extends `\`${infer __}`
+      ? { rest: SkipTemplateString<S> }
+      : never;
+
+/** 解析数组字面量 */
+type ParseArrayLiteral<S extends string, Elements extends unknown[] = []> =
+  TrimStart<S> extends `]${infer Rest}`
+    ? ParseResult<ASTArray<Elements>, Rest>
+    : ParseTernary<S> extends ParseResult<infer Element, infer Rest>
+      ? TrimStart<Rest> extends `,${infer Rest2}`
+        ? ParseArrayLiteral<Rest2, [...Elements, Element]>
+        : TrimStart<Rest> extends `]${infer Rest2}`
+          ? ParseResult<ASTArray<[...Elements, Element]>, Rest2>
+          : ParseError
+      : ParseError;
+
+/** 解析对象属性键 */
+type ParseObjectKey<S extends string> =
+  TrimStart<S> extends `'${infer _}`
+    ? SkipSingleQuoteStringContent<TrimStart<S> extends `'${infer Rest}` ? Rest : never> extends `${infer Rest}`
+      ? TrimStart<S> extends `'${infer Key}'${infer _Rest}`
+        ? { key: Key; rest: Rest }
+        : never
+      : never
+    : TrimStart<S> extends `"${infer _}`
+      ? SkipDoubleQuoteStringContent<TrimStart<S> extends `"${infer Rest}` ? Rest : never> extends `${infer Rest}`
+        ? TrimStart<S> extends `"${infer Key}"${infer _Rest}`
+          ? { key: Key; rest: Rest }
+          : never
+        : never
+      : ParseIdentifier<TrimStart<S>> extends [infer Key extends string, infer Rest extends string]
+        ? Key extends ""
+          ? never
+          : { key: Key; rest: Rest }
+        : never;
+
+type SkipSingleQuoteStringContent<S extends string> = S extends `\\'${infer Rest}`
+  ? SkipSingleQuoteStringContent<Rest>
+  : S extends `'${infer Rest}`
+    ? Rest
+    : S extends `${string}${infer Rest}`
+      ? SkipSingleQuoteStringContent<Rest>
+      : S;
+
+type SkipDoubleQuoteStringContent<S extends string> = S extends `\\"${infer Rest}`
+  ? SkipDoubleQuoteStringContent<Rest>
+  : S extends `"${infer Rest}`
+    ? Rest
+    : S extends `${string}${infer Rest}`
+      ? SkipDoubleQuoteStringContent<Rest>
+      : S;
+
+/** 解析对象字面量 */
+type ParseObjectLiteral<S extends string, Props extends Record<string, unknown> = {}> =
+  TrimStart<S> extends `}${infer Rest}`
+    ? ParseResult<ASTObject<Props>, Rest>
+    : ParseObjectKey<S> extends { key: infer Key extends string; rest: infer Rest1 extends string }
+      ? TrimStart<Rest1> extends `:${infer Rest2}`
+        ? ParseTernary<Rest2> extends ParseResult<infer Value, infer Rest3>
+          ? TrimStart<Rest3> extends `,${infer Rest4}`
+            ? ParseObjectLiteral<Rest4, Props & Record<Key, Value>>
+            : TrimStart<Rest3> extends `}${infer Rest4}`
+              ? ParseResult<ASTObject<Props & Record<Key, Value>>, Rest4>
+              : ParseError
+          : ParseError
+        : ParseError
+      : ParseError;
+
+/** 解析标识符主表达式 */
+type ParseIdentifierPrimary<S extends string> =
+  ParseIdentifier<TrimStart<S>> extends [infer Name extends string, infer Rest extends string]
+    ? Name extends ""
+      ? ParseError
+      : ParseResult<ASTIdentifier<Name>, Rest>
+    : ParseError;
+
+/** 解析主表达式 */
+type ParsePrimary<S extends string> =
+  TrimStart<S> extends `(${infer Rest}`
+    ? ParseTernary<Rest> extends ParseResult<infer Inner, infer Rest2>
+      ? TrimStart<Rest2> extends `)${infer Rest3}`
+        ? ParseResult<ASTParen<Inner>, Rest3>
+        : ParseError
+      : ParseError
+    : TrimStart<S> extends `[${infer Rest}`
+      ? ParseArrayLiteral<Rest>
+      : TrimStart<S> extends `{${infer Rest}`
+        ? ParseObjectLiteral<Rest>
+        : TrimStart<S> extends `true${infer Rest}`
+          ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+            ? ParseIdentifierPrimary<S>
+            : ParseResult<ASTBoolean, Rest>
+          : TrimStart<S> extends `false${infer Rest}`
+            ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParseIdentifierPrimary<S>
+              : ParseResult<ASTBoolean, Rest>
+            : TrimStart<S> extends `${infer C}${infer __Rest}`
+              ? IsDigit<C> extends true
+                ? ParseNumberLiteral<TrimStart<S>> extends [infer __Num, infer Rest2 extends string]
+                  ? ParseResult<ASTNumber, Rest2>
+                  : ParseError
+                : C extends "-"
+                  ? TrimStart<__Rest> extends `${infer C2}${string}`
+                    ? IsDigit<C2> extends true
+                      ? ParseNumberLiteral<TrimStart<__Rest>> extends [infer __Num, infer Rest2 extends string]
+                        ? ParseResult<ASTNumber, Rest2>
+                        : ParseError
+                      : ParseError
+                    : ParseError
+                  : C extends "'" | '"' | "`"
+                    ? ParseStringLiteral<TrimStart<S>> extends { rest: infer Rest2 extends string }
+                      ? ParseResult<ASTString, Rest2>
+                      : ParseError
+                    : IsIdentifierStart<C> extends true
+                      ? ParseIdentifierPrimary<S>
+                      : ParseError
+              : ParseError;
+
+// ============================================================================
+// 后缀运算符解析器 - 成员访问、函数调用
+// ============================================================================
+
+/** 解析后缀运算符入口 */
+type ParsePostfix<S extends string> =
+  ParsePrimary<TrimStart<S>> extends ParseResult<infer Base, infer Rest> ? ParsePostfixTail<Base, Rest> : ParseError;
+
+/** 解析后缀运算符尾部 */
+type ParsePostfixTail<Base, S extends string> =
+  TrimStart<S> extends `.${infer Rest}`
+    ? ParseIdentifier<TrimStart<Rest>> extends [infer Prop extends string, infer Rest2 extends string]
+      ? Prop extends ""
+        ? ParseResult<Base, S>
+        : ParsePostfixTail<ASTMemberAccess<Base, Prop>, Rest2>
+      : ParseResult<Base, S>
+    : TrimStart<S> extends `[${infer Rest}`
+      ? ParseTernary<Rest> extends ParseResult<infer Index, infer Rest2>
+        ? TrimStart<Rest2> extends `]${infer Rest3}`
+          ? ParsePostfixTail<ASTComputedMember<Base, Index>, Rest3>
+          : ParseResult<Base, S>
+        : ParseResult<Base, S>
+      : TrimStart<S> extends `(${infer Rest}`
+        ? ParseCallArgs<Rest> extends { args: infer Args extends unknown[]; rest: infer Rest2 extends string }
+          ? ParsePostfixTail<ASTCall<Base, Args>, Rest2>
+          : ParseResult<Base, S>
+        : ParseResult<Base, S>;
+
+/** 解析函数调用参数 */
+type ParseCallArgs<S extends string, Args extends unknown[] = []> =
+  TrimStart<S> extends `)${infer Rest}`
+    ? { args: Args; rest: Rest }
+    : ParseTernary<S> extends ParseResult<infer Arg, infer Rest>
+      ? TrimStart<Rest> extends `,${infer Rest2}`
+        ? ParseCallArgs<Rest2, [...Args, Arg]>
+        : TrimStart<Rest> extends `)${infer Rest2}`
+          ? { args: [...Args, Arg]; rest: Rest2 }
+          : { args: Args; rest: S }
+      : { args: Args; rest: S };
+
+// ============================================================================
+// 运算符优先级解析器
+// ============================================================================
+
+/** 运算符优先级（从低到高）:
+ * Level 1: ?: (三元)
+ * Level 2: ?? (空值合并)
+ * Level 3: || (逻辑或)
+ * Level 4: && (逻辑与)
+ * Level 5: | (位或)
+ * Level 6: ^ (位异或)
+ * Level 7: & (位与)
+ * Level 8: ==, !=, ===, !== (相等)
+ * Level 9: <, >, <=, >= (比较)
+ * Level 10: <<, >>, >>> (位移)
+ * Level 11: +, - (加减)
+ * Level 12: *, /, % (乘除)
+ * Level 13: ** (幂运算，右结合)
+ * Level 14: 一元运算符
+ * Level 15: 成员访问、函数调用
+ */
+
+/** 解析三元表达式（最低优先级）- 右结合 */
+type ParseTernary<S extends string> =
+  ParseLogicalOr<TrimStart<S>> extends ParseResult<infer Left, infer Rest1>
+    ? TrimStart<Rest1> extends `?${infer AfterQ}`
+      ? ParseTernary<AfterQ> extends ParseResult<infer Then, infer Rest2>
+        ? TrimStart<Rest2> extends `:${infer AfterColon}`
+          ? ParseTernary<AfterColon> extends ParseResult<infer Else, infer Rest3>
+            ? ParseResult<ASTTernary<Left, Then, Else>, Rest3>
+            : ParseResult<Left, Rest1>
+          : ParseResult<Left, Rest1>
+        : ParseResult<Left, Rest1>
+      : ParseResult<Left, Rest1>
+    : ParseError;
+
+/** 解析逻辑或 || */
+type ParseLogicalOr<S extends string> =
+  ParseNullishCoalescing<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseLogicalOrTail<Left, Rest>
+    : ParseError;
+
+type ParseLogicalOrTail<Left, S extends string> =
+  TrimStart<S> extends `||${infer Rest}`
+    ? ParseNullishCoalescing<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseLogicalOrTail<ASTBinary<"||", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析空值合并 ?? */
+type ParseNullishCoalescing<S extends string> =
+  ParseLogicalAnd<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseNullishCoalescingTail<Left, Rest>
+    : ParseError;
+
+type ParseNullishCoalescingTail<Left, S extends string> =
+  TrimStart<S> extends `??${infer Rest}`
+    ? ParseLogicalAnd<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseNullishCoalescingTail<ASTBinary<"??", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析逻辑与 && */
+type ParseLogicalAnd<S extends string> =
+  ParseBitwiseOr<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseLogicalAndTail<Left, Rest>
+    : ParseError;
+
+type ParseLogicalAndTail<Left, S extends string> =
+  TrimStart<S> extends `&&${infer Rest}`
+    ? ParseBitwiseOr<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseLogicalAndTail<ASTBinary<"&&", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位或 | */
+type ParseBitwiseOr<S extends string> =
+  ParseBitwiseXor<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseOrTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseOrTail<Left, S extends string> =
+  TrimStart<S> extends `|${infer Rest}`
+    ? Rest extends `|${string}`
+      ? ParseResult<Left, S> // 排除 ||
+      : ParseBitwiseXor<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseBitwiseOrTail<ASTBinary<"|", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位异或 ^ */
+type ParseBitwiseXor<S extends string> =
+  ParseBitwiseAnd<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseXorTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseXorTail<Left, S extends string> =
+  TrimStart<S> extends `^${infer Rest}`
+    ? ParseBitwiseAnd<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseBitwiseXorTail<ASTBinary<"^", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析位与 & */
+type ParseBitwiseAnd<S extends string> =
+  ParseEquality<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseBitwiseAndTail<Left, Rest>
+    : ParseError;
+
+type ParseBitwiseAndTail<Left, S extends string> =
+  TrimStart<S> extends `&${infer Rest}`
+    ? Rest extends `&${string}`
+      ? ParseResult<Left, S> // 排除 &&
+      : ParseEquality<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseBitwiseAndTail<ASTBinary<"&", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析相等性运算符 */
+type ParseEquality<S extends string> =
+  ParseComparison<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseEqualityTail<Left, Rest>
+    : ParseError;
+
+type ParseEqualityTail<Left, S extends string> =
+  TrimStart<S> extends `===${infer Rest}`
+    ? ParseComparison<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseEqualityTail<ASTBinary<"===", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : TrimStart<S> extends `!==${infer Rest}`
+      ? ParseComparison<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseEqualityTail<ASTBinary<"!==", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : TrimStart<S> extends `==${infer Rest}`
+        ? Rest extends `=${string}`
+          ? ParseResult<Left, S> // 排除 ===
+          : ParseComparison<Rest> extends ParseResult<infer Right, infer Rest2>
+            ? ParseEqualityTail<ASTBinary<"==", Left, Right>, Rest2>
+            : ParseResult<Left, S>
+        : TrimStart<S> extends `!=${infer Rest}`
+          ? Rest extends `=${string}`
+            ? ParseResult<Left, S> // 排除 !==
+            : ParseComparison<Rest> extends ParseResult<infer Right, infer Rest2>
+              ? ParseEqualityTail<ASTBinary<"!=", Left, Right>, Rest2>
+              : ParseResult<Left, S>
+          : ParseResult<Left, S>;
+
+/** 解析比较运算符 */
+type ParseComparison<S extends string> =
+  ParseShift<TrimStart<S>> extends ParseResult<infer Left, infer Rest> ? ParseComparisonTail<Left, Rest> : ParseError;
+
+type ParseComparisonTail<Left, S extends string> =
+  TrimStart<S> extends `<=${infer Rest}`
+    ? ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseComparisonTail<ASTBinary<"<=", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : TrimStart<S> extends `>=${infer Rest}`
+      ? ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseComparisonTail<ASTBinary<">=", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : TrimStart<S> extends `<${infer Rest}`
+        ? Rest extends `=${string}` | `<${string}`
+          ? ParseResult<Left, S> // 排除 <=, <<
+          : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+            ? ParseComparisonTail<ASTBinary<"<", Left, Right>, Rest2>
+            : ParseResult<Left, S>
+        : TrimStart<S> extends `>${infer Rest}`
+          ? Rest extends `=${string}` | `>${string}`
+            ? ParseResult<Left, S> // 排除 >=, >>
+            : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+              ? ParseComparisonTail<ASTBinary<">", Left, Right>, Rest2>
+              : ParseResult<Left, S>
+          : TrimStart<S> extends `in${infer Rest}`
+            ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParseResult<Left, S> // in 后必须有空格或其他分隔符
+              : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+                ? ParseComparisonTail<ASTBinary<"in", Left, Right>, Rest2>
+                : ParseResult<Left, S>
+            : TrimStart<S> extends `instanceof${infer Rest}`
+              ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+                ? ParseResult<Left, S> // instanceof 后必须有空格或其他分隔符
+                : ParseShift<Rest> extends ParseResult<infer Right, infer Rest2>
+                  ? ParseComparisonTail<ASTBinary<"instanceof", Left, Right>, Rest2>
+                  : ParseResult<Left, S>
+              : ParseResult<Left, S>;
+
+/** 解析位移运算符 */
+type ParseShift<S extends string> =
+  ParseAdditive<TrimStart<S>> extends ParseResult<infer Left, infer Rest> ? ParseShiftTail<Left, Rest> : ParseError;
+
+type ParseShiftTail<Left, S extends string> =
+  TrimStart<S> extends `<<${infer Rest}`
+    ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseShiftTail<ASTBinary<"<<", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : TrimStart<S> extends `>>>${infer Rest}`
+      ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseShiftTail<ASTBinary<">>>", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : TrimStart<S> extends `>>${infer Rest}`
+        ? ParseAdditive<Rest> extends ParseResult<infer Right, infer Rest2>
+          ? ParseShiftTail<ASTBinary<">>", Left, Right>, Rest2>
+          : ParseResult<Left, S>
+        : ParseResult<Left, S>;
+
+/** 解析加减运算符 */
+type ParseAdditive<S extends string> =
+  ParseMultiplicative<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseAdditiveTail<Left, Rest>
+    : ParseError;
+
+type ParseAdditiveTail<Left, S extends string> =
+  TrimStart<S> extends `+${infer Rest}`
+    ? ParseMultiplicative<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseAdditiveTail<ASTBinary<"+", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : TrimStart<S> extends `-${infer Rest}`
+      ? ParseMultiplicative<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseAdditiveTail<ASTBinary<"-", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : ParseResult<Left, S>;
+
+/** 解析乘除运算符 */
+type ParseMultiplicative<S extends string> =
+  ParseExponentiation<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseMultiplicativeTail<Left, Rest>
+    : ParseError;
+
+type ParseMultiplicativeTail<Left, S extends string> =
+  TrimStart<S> extends `*${infer Rest}`
+    ? Rest extends `*${string}`
+      ? ParseResult<Left, S> // 排除 **
+      : ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseMultiplicativeTail<ASTBinary<"*", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+    : TrimStart<S> extends `/${infer Rest}`
+      ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+        ? ParseMultiplicativeTail<ASTBinary<"/", Left, Right>, Rest2>
+        : ParseResult<Left, S>
+      : TrimStart<S> extends `%${infer Rest}`
+        ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+          ? ParseMultiplicativeTail<ASTBinary<"%", Left, Right>, Rest2>
+          : ParseResult<Left, S>
+        : ParseResult<Left, S>;
+
+/** 解析幂运算符（右结合） */
+type ParseExponentiation<S extends string> =
+  ParseUnary<TrimStart<S>> extends ParseResult<infer Left, infer Rest>
+    ? ParseExponentiationTail<Left, Rest>
+    : ParseError;
+
+type ParseExponentiationTail<Left, S extends string> =
+  TrimStart<S> extends `**${infer Rest}`
+    ? ParseExponentiation<Rest> extends ParseResult<infer Right, infer Rest2>
+      ? ParseResult<ASTBinary<"**", Left, Right>, Rest2>
+      : ParseResult<Left, S>
+    : ParseResult<Left, S>;
+
+/** 解析一元运算符 */
+type ParseUnary<S extends string> =
+  TrimStart<S> extends `!${infer Rest}`
+    ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+      ? ParseResult<ASTUnary<"!", Operand>, Rest2>
+      : ParseError
+    : TrimStart<S> extends `~${infer Rest}`
+      ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+        ? ParseResult<ASTUnary<"~", Operand>, Rest2>
+        : ParseError
+      : TrimStart<S> extends `typeof${infer Rest}`
+        ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+          ? ParseError // typeof 后必须有空格或其他分隔符
+          : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+            ? ParseResult<ASTUnary<"typeof", Operand>, Rest2>
+            : ParseError
+        : TrimStart<S> extends `void${infer Rest}`
+          ? IsIdentifierChar<Rest extends `${infer C}${string}` ? C : ""> extends true
+            ? ParseError // void 后必须有空格或其他分隔符
+            : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+              ? ParseResult<ASTUnary<"void", Operand>, Rest2>
+              : ParseError
+          : TrimStart<S> extends `-${infer Rest}`
+            ? IsDigit<Rest extends `${infer C}${string}` ? C : ""> extends true
+              ? ParsePostfix<S> // 负数字面量
+              : ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+                ? ParseResult<ASTUnary<"-", Operand>, Rest2>
+                : ParseError
+            : TrimStart<S> extends `+${infer Rest}`
+              ? ParseUnary<Rest> extends ParseResult<infer Operand, infer Rest2>
+                ? ParseResult<ASTUnary<"+", Operand>, Rest2>
+                : ParseError
+              : ParsePostfix<S>;
+
+// ============================================================================
+// 表达式解析入口
+// ============================================================================
+
+/** 解析表达式入口 */
+export type ParseExpression<S extends string> =
+  ParseTernary<S> extends ParseResult<infer AST, infer Rest>
+    ? TrimStart<Rest> extends ""
+      ? AST
+      : ASTUnknown // 有剩余未解析的内容
+    : ASTUnknown;
