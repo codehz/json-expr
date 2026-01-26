@@ -6,13 +6,6 @@ import type { BranchNode, CompiledData, CompiledExpression, ControlFlowNode, Jum
 const evaluatorCache = new Map<string, (values: unknown[]) => unknown>();
 
 /**
- * 检测编译数据是否包含控制流节点（V2 格式）
- */
-function isV2Format(expressions: CompiledExpression[]): boolean {
-  return expressions.some((expr) => Array.isArray(expr));
-}
-
-/**
  * 分析并验证控制流结构，将 br/jmp/phi 翻译为 if-else 语句
  *
  * 控制流节点规则：
@@ -198,10 +191,8 @@ export function evaluate<TResult = unknown>(data: CompiledData, values: Record<s
   let evaluator = evaluatorCache.get(cacheKey);
 
   if (!evaluator) {
-    // 根据格式选择合适的函数体构造器
-    const functionBody = isV2Format(expressions)
-      ? buildEvaluatorFunctionBodyV2(expressions, variableNames.length)
-      : buildEvaluatorFunctionBody(expressions as string[], variableNames.length);
+    // 默认使用 V2 格式的函数体构造器
+    const functionBody = buildEvaluatorFunctionBodyV2(expressions, variableNames.length);
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     evaluator = new Function("$values", functionBody) as (values: unknown[]) => unknown;
     evaluatorCache.set(cacheKey, evaluator);
@@ -214,34 +205,6 @@ export function evaluate<TResult = unknown>(data: CompiledData, values: Record<s
   } catch (error) {
     throw new Error(`Failed to evaluate expression: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-/**
- * 构造求值函数体
- *
- * @param expressions - 表达式列表
- * @param variableCount - 变量数量
- * @returns 函数体字符串
- *
- * @example
- * ```ts
- * buildEvaluatorFunctionBody(["$0+$1", "$2*2"], 2)
- * // 返回执行 $0+$1 并存储到 $values[2]，然后执行 $2*2 的函数体
- * ```
- */
-function buildEvaluatorFunctionBody(expressions: string[], variableCount: number): string {
-  if (expressions.length === 0) throw new Error("No expressions to evaluate");
-
-  const lines = [
-    ...Array.from({ length: variableCount }, (_, i) => `const $${i} = $values[${i}];`),
-    ...expressions.map((expr, i) => {
-      const idx = variableCount + i;
-      return `const $${idx} = ${expr}; $values[${idx}] = $${idx};`;
-    }),
-    `return $values[$values.length - 1];`,
-  ];
-
-  return lines.join("\n");
 }
 
 /**
