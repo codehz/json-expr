@@ -156,7 +156,6 @@ const result = expr({ sum, x })("sum * x");
 - `variables` - 表达式中使用的所有变量映射或数组
 - `options` - 编译选项（可选）
   - `inline?: boolean` - 是否启用内联优化，将只被引用一次的子表达式内联到使用位置（默认：true）
-  - `shortCircuit?: boolean` - 是否启用短路求值，为 &&, ||, ??, 和三元表达式生成控制流节点（默认：true）
 
 **返回值：** CompiledData 数组
 
@@ -175,10 +174,6 @@ const compiled = compile(result, { x, y });
 // 禁用内联优化
 const noInline = compile(result, { x, y }, { inline: false });
 // [["x", "y"], "$0+$1", "$0*$1", "$2+$3"]
-
-// 禁用短路求值
-const noShortCircuit = compile(result, { x, y }, { shortCircuit: false });
-// 生成的表达式将使用直接的运算符而非控制流节点
 ```
 
 ### `evaluate<TResult>(data: CompiledData, values: Record<string, unknown>): TResult`
@@ -601,7 +596,7 @@ const b = variable<boolean>();
 
 // 逻辑或短路
 const orExpr = expr({ a, b })("a || b");
-const compiled = compile(orExpr, { a, b }, { shortCircuit: true });
+const compiled = compile(orExpr, { a, b });
 
 // 当 a 为 true 时，b 不会被求值
 // 编译数据包含控制流节点：
@@ -704,7 +699,7 @@ const compiled = compile(sum, { x, y });
 ```typescript
 // 输入
 const result = expr({ a, b })("a || b");
-const compiled = compile(result, { a, b }, { shortCircuit: true });
+const compiled = compile(result, { a, b });
 
 // 输出
 // [
@@ -895,11 +890,7 @@ const discount = evaluate(rule, {
    evaluate(compiled, values2);
    ```
 
-2. **合理使用短路求值**：对于条件表达式，启用短路求值可以避免不必要的计算
-
-   ```typescript
-   compile(expression, variables, { shortCircuit: true });
-   ```
+2. **利用短路求值**：短路求值已默认启用，对于条件表达式可以避免不必要的计算
 
 3. **利用自动内联**：编译器会自动内联只引用一次的子表达式，无需手动优化
 

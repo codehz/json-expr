@@ -44,14 +44,7 @@ const ALLOWED_GLOBALS = new Set([
 /**
  * 编译选项
  */
-export interface CompileOptions {
-  /**
-   * 是否启用短路求值
-   * 为 &&, ||, ??, 和三元表达式生成控制流节点
-   * @default true
-   */
-  shortCircuit?: boolean;
-}
+export interface CompileOptions {}
 
 /**
  * 将 Proxy Expression 编译为可序列化的 JSON 结构
@@ -79,8 +72,6 @@ export function compile<TResult>(
   variables: Record<string, unknown>,
   options: CompileOptions = {}
 ): CompiledData {
-  const { shortCircuit = true } = options;
-
   const ast = serializeArgumentToAST(expression);
 
   // 建立变量名到索引的映射，以及 symbol -> 变量名的映射
@@ -127,76 +118,71 @@ export function compile<TResult>(
     throw new Error(`Undefined variable(s): ${uniqueVars.join(", ")}`);
   }
 
-  // 生成编译后的表达式
+  // 生成编译后的表达式（短路求值总是启用）
   const expressions: CompiledExpression[] = [];
+  let nextIndex = variableOrder.length;
 
-  if (shortCircuit) {
-    let nextIndex = variableOrder.length;
-
-    function compileAst(node: ASTNode): number {
-      if (node.type === "BinaryExpr" && (node.operator === "||" || node.operator === "&&" || node.operator === "??")) {
-        return compileShortCircuit(node);
-      }
-      if (node.type === "ConditionalExpr") {
-        return compileConditional(node);
-      }
-      const exprStr = generate(node);
-      expressions.push(exprStr);
-      return nextIndex++;
+  function compileAst(node: ASTNode): number {
+    if (node.type === "BinaryExpr" && (node.operator === "||" || node.operator === "&&" || node.operator === "??")) {
+      return compileShortCircuit(node);
     }
-
-    function compileShortCircuit(node: ASTNode & { type: "BinaryExpr" }): number {
-      const leftIdx = compileAst(node.left);
-
-      const branchConditions: Record<string, string> = {
-        "||": `$${leftIdx}`,
-        "&&": `!$${leftIdx}`,
-        "??": `$${leftIdx}!=null`,
-      };
-
-      const branchIdx = expressions.length;
-      expressions.push(["br", branchConditions[node.operator], 0] as BranchNode);
-      nextIndex++;
-
-      compileAst(node.right);
-      const skipCount = expressions.length - branchIdx - 1;
-      (expressions[branchIdx] as BranchNode)[2] = skipCount;
-
-      const phiIdx = nextIndex++;
-      expressions.push(["phi"] as PhiNode);
-
-      return phiIdx;
+    if (node.type === "ConditionalExpr") {
+      return compileConditional(node);
     }
-
-    function compileConditional(node: ASTNode & { type: "ConditionalExpr" }): number {
-      const testIdx = compileAst(node.test);
-
-      const branchIdx = expressions.length;
-      expressions.push(["br", `$${testIdx}`, 0] as BranchNode);
-      nextIndex++;
-
-      compileAst(node.alternate);
-
-      const jmpIdx = expressions.length;
-      expressions.push(["jmp", 0] as JumpNode);
-      nextIndex++;
-
-      compileAst(node.consequent);
-      const thenEndIdx = expressions.length;
-
-      (expressions[branchIdx] as BranchNode)[2] = jmpIdx - branchIdx;
-      (expressions[jmpIdx] as JumpNode)[1] = thenEndIdx - jmpIdx - 1;
-
-      const phiIdx = nextIndex++;
-      expressions.push(["phi"] as PhiNode);
-
-      return phiIdx;
-    }
-
-    compileAst(transformed);
-  } else {
-    expressions.push(generate(transformed));
+    const exprStr = generate(node);
+    expressions.push(exprStr);
+    return nextIndex++;
   }
+
+  function compileShortCircuit(node: ASTNode & { type: "BinaryExpr" }): number {
+    const leftIdx = compileAst(node.left);
+
+    const branchConditions: Record<string, string> = {
+      "||": `$${leftIdx}`,
+      "&&": `!$${leftIdx}`,
+      "??": `$${leftIdx}!=null`,
+    };
+
+    const branchIdx = expressions.length;
+    expressions.push(["br", branchConditions[node.operator], 0] as BranchNode);
+    nextIndex++;
+
+    compileAst(node.right);
+    const skipCount = expressions.length - branchIdx - 1;
+    (expressions[branchIdx] as BranchNode)[2] = skipCount;
+
+    const phiIdx = nextIndex++;
+    expressions.push(["phi"] as PhiNode);
+
+    return phiIdx;
+  }
+
+  function compileConditional(node: ASTNode & { type: "ConditionalExpr" }): number {
+    const testIdx = compileAst(node.test);
+
+    const branchIdx = expressions.length;
+    expressions.push(["br", `$${testIdx}`, 0] as BranchNode);
+    nextIndex++;
+
+    compileAst(node.alternate);
+
+    const jmpIdx = expressions.length;
+    expressions.push(["jmp", 0] as JumpNode);
+    nextIndex++;
+
+    compileAst(node.consequent);
+    const thenEndIdx = expressions.length;
+
+    (expressions[branchIdx] as BranchNode)[2] = jmpIdx - branchIdx;
+    (expressions[jmpIdx] as JumpNode)[1] = thenEndIdx - jmpIdx - 1;
+
+    const phiIdx = nextIndex++;
+    expressions.push(["phi"] as PhiNode);
+
+    return phiIdx;
+  }
+
+  compileAst(transformed);
 
   return [variableOrder, ...expressions];
 }
