@@ -710,3 +710,429 @@ describe("FnNode 格式", () => {
     expect(compiled[1]).toEqual(["fn", 2, "_0+_1"]);
   });
 });
+
+describe("lambda 内控制流表达式", () => {
+  describe("逻辑或 (||)", () => {
+    test("lambda 内使用 || 返回第一个真值", () => {
+      const items = variable<{ a: number; b: number }[]>();
+      const result = items.map(
+        lambda<[{ a: number; b: number }], number>((item) => expr({ item })("item.a || item.b"))
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { a: 0, b: 5 },
+              { a: 3, b: 7 },
+              { a: 0, b: 0 },
+            ],
+          }
+        )
+      ).toEqual([5, 3, 0]);
+    });
+
+    test("lambda 内 || 短路求值", () => {
+      const items = variable<{ val: number | null; fallback: number }[]>();
+      const result = items.map(
+        lambda<[{ val: number | null; fallback: number }], number>((item) =>
+          expr({ item })("item.val || item.fallback")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { val: 10, fallback: 99 },
+              { val: 0, fallback: 42 },
+              { val: null, fallback: 7 },
+            ],
+          }
+        )
+      ).toEqual([10, 42, 7]);
+    });
+
+    test("lambda 内 || 捕获外部变量", () => {
+      const numbers = variable<number[]>();
+      const defaultVal = variable<number>();
+      const result = numbers.map(lambda<[number], number>((n) => expr({ n, defaultVal })("n || defaultVal")));
+
+      expect(compileAndEvaluate(result, { numbers, defaultVal }, { numbers: [0, 5, 0, 3], defaultVal: 100 })).toEqual([
+        100, 5, 100, 3,
+      ]);
+    });
+  });
+
+  describe("逻辑与 (&&)", () => {
+    test("lambda 内使用 && 返回第一个假值或最后一个真值", () => {
+      const items = variable<{ a: number; b: number }[]>();
+      const result = items.map(
+        lambda<[{ a: number; b: number }], number>((item) => expr({ item })("item.a && item.b"))
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { a: 0, b: 5 },
+              { a: 3, b: 7 },
+              { a: 5, b: 0 },
+            ],
+          }
+        )
+      ).toEqual([0, 7, 0]);
+    });
+
+    test("lambda 内 && 短路求值", () => {
+      const items = variable<{ condition: boolean; value: number }[]>();
+      const result = items.map(
+        lambda<[{ condition: boolean; value: number }], number | boolean>((item) =>
+          expr({ item })("item.condition && item.value")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { condition: true, value: 42 },
+              { condition: false, value: 99 },
+              { condition: true, value: 0 },
+            ],
+          }
+        )
+      ).toEqual([42, false, 0]);
+    });
+
+    test("lambda 内 && 捕获外部变量", () => {
+      const numbers = variable<number[]>();
+      const multiplier = variable<number>();
+      const result = numbers.map(lambda<[number], number>((n) => expr({ n, multiplier })("n && n * multiplier")));
+
+      expect(compileAndEvaluate(result, { numbers, multiplier }, { numbers: [0, 2, 3, 0], multiplier: 10 })).toEqual([
+        0, 20, 30, 0,
+      ]);
+    });
+  });
+
+  describe("空值合并 (??)", () => {
+    test("lambda 内使用 ?? 处理 null/undefined", () => {
+      const items = variable<{ value: number | null | undefined }[]>();
+      const result = items.map(
+        lambda<[{ value: number | null | undefined }], number>((item) => expr({ item })("item.value ?? 0"))
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          { items: [{ value: 5 }, { value: null }, { value: undefined }, { value: 0 }] }
+        )
+      ).toEqual([5, 0, 0, 0]);
+    });
+
+    test("lambda 内 ?? 与 || 的区别 (保留 0 和空字符串)", () => {
+      const items = variable<{ value: number | null }[]>();
+      const withNullish = items.map(
+        lambda<[{ value: number | null }], number>((item) => expr({ item })("item.value ?? 99"))
+      );
+      const withOr = items.map(
+        lambda<[{ value: number | null }], number>((item) => expr({ item })("item.value || 99"))
+      );
+
+      const testData = { items: [{ value: 0 }, { value: null }, { value: 5 }] };
+
+      // ?? 保留 0
+      expect(compileAndEvaluate(withNullish, { items }, testData)).toEqual([0, 99, 5]);
+      // || 将 0 视为假值
+      expect(compileAndEvaluate(withOr, { items }, testData)).toEqual([99, 99, 5]);
+    });
+
+    test("lambda 内 ?? 捕获外部变量", () => {
+      const items = variable<(number | null)[]>();
+      const defaultVal = variable<number>();
+      const result = items.map(lambda<[number | null], number>((n) => expr({ n, defaultVal })("n ?? defaultVal")));
+
+      expect(compileAndEvaluate(result, { items, defaultVal }, { items: [1, null, 0, null], defaultVal: -1 })).toEqual([
+        1, -1, 0, -1,
+      ]);
+    });
+  });
+
+  describe("三元表达式 (?:)", () => {
+    test("lambda 内使用三元表达式", () => {
+      const numbers = variable<number[]>();
+      const result = numbers.map(lambda<[number], string>((n) => expr({ n })("n > 0 ? 'positive' : 'non-positive'")));
+
+      expect(compileAndEvaluate(result, { numbers }, { numbers: [5, 0, -3, 10] })).toEqual([
+        "positive",
+        "non-positive",
+        "non-positive",
+        "positive",
+      ]);
+    });
+
+    test("lambda 内三元表达式短路求值", () => {
+      const items = variable<{ flag: boolean; a: number; b: number }[]>();
+      const result = items.map(
+        lambda<[{ flag: boolean; a: number; b: number }], number>((item) =>
+          expr({ item })("item.flag ? item.a * 2 : item.b * 3")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { flag: true, a: 5, b: 10 },
+              { flag: false, a: 5, b: 10 },
+            ],
+          }
+        )
+      ).toEqual([10, 30]);
+    });
+
+    test("lambda 内嵌套三元表达式", () => {
+      const numbers = variable<number[]>();
+      const result = numbers.map(
+        lambda<[number], string>((n) => expr({ n })("n > 0 ? 'positive' : n < 0 ? 'negative' : 'zero'"))
+      );
+
+      expect(compileAndEvaluate(result, { numbers }, { numbers: [5, -3, 0, 10, -1] })).toEqual([
+        "positive",
+        "negative",
+        "zero",
+        "positive",
+        "negative",
+      ]);
+    });
+
+    test("lambda 内三元表达式捕获外部变量", () => {
+      const numbers = variable<number[]>();
+      const threshold = variable<number>();
+      const highLabel = variable<string>();
+      const lowLabel = variable<string>();
+      const result = numbers.map(
+        lambda<[number], string>((n) =>
+          expr({ n, threshold, highLabel, lowLabel })("n >= threshold ? highLabel : lowLabel")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { numbers, threshold, highLabel, lowLabel },
+          { numbers: [1, 5, 3, 8], threshold: 5, highLabel: "HIGH", lowLabel: "LOW" }
+        )
+      ).toEqual(["LOW", "HIGH", "LOW", "HIGH"]);
+    });
+  });
+
+  describe("组合控制流", () => {
+    test("lambda 内 || 和 && 组合", () => {
+      const items = variable<{ a: number; b: number; c: number }[]>();
+      const result = items.map(
+        lambda<[{ a: number; b: number; c: number }], number>((item) => expr({ item })("item.a && item.b || item.c"))
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { a: 1, b: 2, c: 3 }, // 1 && 2 = 2, 2 || 3 = 2
+              { a: 0, b: 2, c: 3 }, // 0 && 2 = 0, 0 || 3 = 3
+              { a: 1, b: 0, c: 3 }, // 1 && 0 = 0, 0 || 3 = 3
+            ],
+          }
+        )
+      ).toEqual([2, 3, 3]);
+    });
+
+    test("lambda 内 ?? 和三元表达式组合", () => {
+      const items = variable<{ value: number | null; flag: boolean }[]>();
+      const result = items.map(
+        lambda<[{ value: number | null; flag: boolean }], number>((item) =>
+          expr({ item })("(item.value ?? 0) > 5 ? 1 : 0")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items },
+          {
+            items: [
+              { value: 10, flag: true },
+              { value: null, flag: true },
+              { value: 3, flag: false },
+            ],
+          }
+        )
+      ).toEqual([1, 0, 0]);
+    });
+
+    test("lambda 内多重控制流与外部变量", () => {
+      const items = variable<{ x: number | null; y: number }[]>();
+      const defaultX = variable<number>();
+      const multiplier = variable<number>();
+      const result = items.map(
+        lambda<[{ x: number | null; y: number }], number>((item) =>
+          expr({ item, defaultX, multiplier })(
+            "((item.x ?? defaultX) > item.y) ? (item.x ?? defaultX) * multiplier : item.y"
+          )
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items, defaultX, multiplier },
+          {
+            items: [
+              { x: 10, y: 5 },
+              { x: null, y: 5 },
+              { x: 3, y: 10 },
+            ],
+            defaultX: 8,
+            multiplier: 2,
+          }
+        )
+      ).toEqual([20, 16, 10]); // 10>5 -> 10*2=20, 8>5 -> 8*2=16, 3<10 -> 10
+    });
+  });
+
+  describe("嵌套 lambda 中的控制流", () => {
+    test("内层 lambda 使用三元表达式", () => {
+      const matrix = variable<number[][]>();
+      const result = matrix.map(
+        lambda<[number[]], string[]>((row) =>
+          row.map(lambda<[number], string>((n) => expr({ n })("n > 0 ? '+' : '-'")))
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { matrix },
+          {
+            matrix: [
+              [1, -2, 3],
+              [-1, 0, 2],
+            ],
+          }
+        )
+      ).toEqual([
+        ["+", "-", "+"],
+        ["-", "-", "+"],
+      ]);
+    });
+
+    test("内层 lambda 使用 ?? 捕获外层参数", () => {
+      const data = variable<{ defaults: number; values: (number | null)[] }[]>();
+      const result = data.map(
+        lambda<[{ defaults: number; values: (number | null)[] }], number[]>((group) =>
+          group.values.map(lambda<[number | null], number>((v) => expr({ v, group })("v ?? group.defaults")))
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { data },
+          {
+            data: [
+              { defaults: 0, values: [1, null, 3] },
+              { defaults: 99, values: [null, 2, null] },
+            ],
+          }
+        )
+      ).toEqual([
+        [1, 0, 3],
+        [99, 2, 99],
+      ]);
+    });
+
+    test("内层 lambda 使用 || 和 && 组合", () => {
+      const matrix = variable<{ a: number; b: number }[][]>();
+      const result = matrix.map(
+        lambda<[{ a: number; b: number }[]], number[]>((row) =>
+          row.map(lambda<[{ a: number; b: number }], number>((item) => expr({ item })("item.a && item.b || 0")))
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { matrix },
+          {
+            matrix: [
+              [
+                { a: 1, b: 2 },
+                { a: 0, b: 5 },
+              ],
+              [
+                { a: 3, b: 0 },
+                { a: 4, b: 5 },
+              ],
+            ],
+          }
+        )
+      ).toEqual([
+        [2, 0],
+        [0, 5],
+      ]);
+    });
+
+    test("filter 内使用控制流表达式", () => {
+      const items = variable<{ value: number | null; threshold: number }[]>();
+      const globalDefault = variable<number>();
+      const result = items.filter(
+        lambda<[{ value: number | null; threshold: number }], boolean>((item) =>
+          expr({ item, globalDefault })("(item.value ?? globalDefault) > item.threshold")
+        )
+      );
+
+      expect(
+        compileAndEvaluate(
+          result,
+          { items, globalDefault },
+          {
+            items: [
+              { value: 10, threshold: 5 },
+              { value: null, threshold: 5 },
+              { value: 3, threshold: 10 },
+              { value: null, threshold: 2 },
+            ],
+            globalDefault: 4,
+          }
+        )
+      ).toEqual([
+        { value: 10, threshold: 5 },
+        { value: null, threshold: 2 },
+      ]);
+    });
+
+    test("reduce 内使用三元表达式", () => {
+      const numbers = variable<number[]>();
+      const result = numbers.reduce(
+        lambda<[number, number], number>((acc, n) => expr({ acc, n })("n > 0 ? acc + n : acc")),
+        0
+      );
+
+      expect(compileAndEvaluate<number>(result, { numbers }, { numbers: [1, -2, 3, -4, 5] })).toBe(9); // 1 + 3 + 5
+    });
+  });
+});
