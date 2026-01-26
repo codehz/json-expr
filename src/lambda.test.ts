@@ -9,8 +9,8 @@ describe("lambda 函数", () => {
 
       const compiled = compile(doubled, { numbers });
       expect(compiled[0]).toEqual(["numbers"]);
-      // 表达式包含箭头函数
-      expect(compiled[1]).toContain("=>");
+      // Lambda 编译为 FnNode: ["fn", paramCount, ...stmts]
+      expect(compiled[1]).toEqual(["fn", 1, "_0*2"]);
 
       const result = evaluate(compiled, { numbers: [1, 2, 3] });
       expect(result).toEqual([2, 4, 6]);
@@ -671,8 +671,8 @@ describe("嵌套 lambda", () => {
       );
 
       const compiled = compile(processed, { matrix });
-      // 编译结果: $[0].map((_0,_1)=>_0.map(_2=>_2+_1*100))
-      expect(compiled[1]).toContain("(_0,_1)=>_0.map(_2=>");
+      // 编译结果为 FnNode 格式: ["fn", 2, ["fn", 1, "_2+_1*100"], "_0.map($[2])"]
+      expect(compiled[1]).toEqual(["fn", 2, ["fn", 1, "_2+_1*100"], "_0.map($[2])"]);
 
       const result = evaluate(compiled, {
         matrix: [
@@ -688,18 +688,17 @@ describe("嵌套 lambda", () => {
   });
 });
 
-describe("parser 箭头函数支持", () => {
-  test("解析单参数箭头函数", () => {
+describe("FnNode 格式", () => {
+  test("单参数 lambda 编译为 FnNode", () => {
     const numbers = variable<number[]>();
-    // 直接使用生成的箭头函数源码
     const result = numbers.map(lambda<[number], number>((n) => expr({ n })("n * 2")));
 
     const compiled = compile(result, { numbers });
-    const exprStr = compiled[1] as string;
-    expect(exprStr).toMatch(/_0=>/);
+    // FnNode 格式: ["fn", paramCount, ...stmts]
+    expect(compiled[1]).toEqual(["fn", 1, "_0*2"]);
   });
 
-  test("解析多参数箭头函数", () => {
+  test("多参数 lambda 编译为 FnNode", () => {
     const numbers = variable<number[]>();
     const result = numbers.reduce(
       lambda<[number, number], number>((acc, val) => expr({ acc, val })("acc + val")),
@@ -707,7 +706,7 @@ describe("parser 箭头函数支持", () => {
     );
 
     const compiled = compile(result, { numbers });
-    const exprStr = compiled[1] as string;
-    expect(exprStr).toMatch(/\(_0,_1\)=>/);
+    // FnNode 格式: ["fn", paramCount, ...stmts]
+    expect(compiled[1]).toEqual(["fn", 2, "_0+_1"]);
   });
 });

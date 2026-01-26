@@ -172,9 +172,15 @@ export type PhiNode = ["phi"];
 export type ControlFlowNode = BranchNode | JumpNode | PhiNode;
 
 /**
- * 表达式类型（可以是字符串或控制流节点）
+ * Lambda 函数节点
+ * ["fn", paramCount, ...stmts]
  */
-export type CompiledExpression = string | ControlFlowNode;
+export type FnNode = ["fn", paramCount: number, ...stmts: CompiledExpression[]];
+
+/**
+ * 表达式类型（可以是字符串、控制流节点或 Lambda 节点）
+ */
+export type CompiledExpression = string | ControlFlowNode | FnNode;
 
 /**
  * 编译后的可序列化结构

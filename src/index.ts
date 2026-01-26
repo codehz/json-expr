@@ -13,6 +13,7 @@ export type {
   CompiledData,
   CompiledExpression,
   ExprValue,
+  FnNode,
   InferLambdaArgs,
   InferLambdaReturn,
   Lambda,
