@@ -13,11 +13,68 @@ export type ProxyExpression<T = unknown> = {
 };
 
 /**
+ * 特殊全局类型 - 这些类型作为参数时允许直接传入原始值
+ * 不需要递归展开其属性
+ */
+type BuiltinObjects =
+  | Date
+  | RegExp
+  | Error
+  | URL
+  | URLSearchParams
+  | ArrayBuffer
+  | SharedArrayBuffer
+  | DataView
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array
+  | BigInt64Array
+  | BigUint64Array;
+
+/**
+ * 将数组/元组类型的每个元素转换为 ProxifyArg
+ * 保留元组的结构信息
+ */
+type ProxifyArgTuple<T extends readonly unknown[]> = T extends readonly [infer Head, ...infer Tail]
+  ? [ProxifyArg<Head>, ...ProxifyArgTuple<Tail>]
+  : T extends readonly []
+    ? []
+    : T extends readonly (infer E)[]
+      ? readonly ProxifyArg<E>[]
+      : never;
+
+export type ProxifyArg<T> =
+  | Proxify<T>
+  | (T extends BuiltinObjects | string | number | boolean | bigint | undefined | null
+      ? T
+      : T extends readonly unknown[]
+        ? ProxifyArgTuple<T>
+        : T extends Map<infer K, infer V>
+          ? Map<ProxifyArg<K>, ProxifyArg<V>>
+          : T extends Set<infer E>
+            ? Set<ProxifyArg<E>>
+            : T extends WeakMap<infer K, infer V>
+              ? WeakMap<ProxifyArg<K>, ProxifyArg<V>>
+              : T extends WeakSet<infer E>
+                ? WeakSet<ProxifyArg<E>>
+                : T extends Promise<infer R>
+                  ? Promise<ProxifyArg<R>>
+                  : T extends (...args: infer _A) => infer _R
+                    ? never
+                    : { [K in keyof T]: ProxifyArg<T[K]> });
+
+/**
  * 处理函数参数的 Proxy 转换
  * 参数可以是原始值或对应的 Proxy
  */
 export type ProxifyArgs<T extends unknown[]> = {
-  [K in keyof T]: T[K] | Proxify<T[K]>;
+  [K in keyof T]: ProxifyArg<T[K]>;
 };
 
 /**
