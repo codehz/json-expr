@@ -2,12 +2,14 @@
 // Proxy 类型系统
 // ============================================================================
 
+declare const ProxyExpression: unique symbol;
+
 /**
  * Proxy Expression 类型标记（用于类型推导）
  * 这是一个 phantom type，实际运行时是 Proxy 对象
  */
 export type ProxyExpression<T = unknown> = {
-  readonly __proxyExpression: T;
+  readonly [ProxyExpression]: T;
 };
 
 /**
