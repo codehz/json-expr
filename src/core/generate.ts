@@ -16,6 +16,10 @@ export interface GenerateContext {
   paramMapping: Map<symbol, string>;
 }
 
+export interface GenerateOptions {
+  rewriteNode?: (node: ASTNode, ctx: GenerateContext) => ASTNode;
+}
+
 /**
  * 创建新的生成上下文
  */
@@ -29,9 +33,9 @@ export function createGenerateContext(): GenerateContext {
 /**
  * 从 AST 生成规范化的代码
  */
-export function generate(node: ASTNode): string {
+export function generate(node: ASTNode, options: GenerateOptions = {}): string {
   const ctx = createGenerateContext();
-  return generateWithContext(node, ctx);
+  return generateWithContext(node, ctx, options);
 }
 
 /** 需要空格分隔的关键字运算符 */
@@ -41,82 +45,86 @@ const KEYWORD_UNARY_OPERATORS = new Set(["typeof", "void"]);
 /**
  * 带上下文的代码生成
  */
-export function generateWithContext(node: ASTNode, ctx: GenerateContext): string {
-  switch (node.type) {
+export function generateWithContext(node: ASTNode, ctx: GenerateContext, options: GenerateOptions = {}): string {
+  const rewritten = options.rewriteNode?.(node, ctx) ?? node;
+
+  switch (rewritten.type) {
     case "NumberLiteral":
-      return node.raw;
+      return rewritten.raw;
 
     case "StringLiteral":
-      return JSON.stringify(node.value);
+      return JSON.stringify(rewritten.value);
 
     case "BooleanLiteral":
-      return node.value ? "true" : "false";
+      return rewritten.value ? "true" : "false";
 
     case "NullLiteral":
       return "null";
 
     case "Identifier":
-      return node.name;
+      return rewritten.name;
 
     case "Placeholder":
-      return ctx.paramMapping.get(node.id) ?? `$$${node.id.description}$$`;
+      return ctx.paramMapping.get(rewritten.id) ?? `$$${rewritten.id.description}$$`;
 
     case "BinaryExpr": {
-      const left = wrapIfNeededWithContext(node.left, node, "left", ctx);
-      const right = wrapIfNeededWithContext(node.right, node, "right", ctx);
-      const sep = KEYWORD_BINARY_OPERATORS.has(node.operator) ? " " : "";
-      return `${left}${sep}${node.operator}${sep}${right}`;
+      const left = wrapIfNeededWithContext(rewritten.left, rewritten, "left", ctx, options);
+      const right = wrapIfNeededWithContext(rewritten.right, rewritten, "right", ctx, options);
+      const sep = KEYWORD_BINARY_OPERATORS.has(rewritten.operator) ? " " : "";
+      return `${left}${sep}${rewritten.operator}${sep}${right}`;
     }
 
     case "UnaryExpr": {
-      if (!node.prefix) {
-        return generateWithContext(node.argument, ctx) + node.operator;
+      if (!rewritten.prefix) {
+        return generateWithContext(rewritten.argument, ctx, options) + rewritten.operator;
       }
-      const arg = wrapIfNeededWithContext(node.argument, node, "argument", ctx);
-      const sep = KEYWORD_UNARY_OPERATORS.has(node.operator) ? " " : "";
-      return `${node.operator}${sep}${arg}`;
+      const arg = wrapIfNeededWithContext(rewritten.argument, rewritten, "argument", ctx, options);
+      const sep = KEYWORD_UNARY_OPERATORS.has(rewritten.operator) ? " " : "";
+      return `${rewritten.operator}${sep}${arg}`;
     }
 
     case "ConditionalExpr": {
-      const test = wrapIfNeededWithContext(node.test, node, "test", ctx);
-      const consequent = wrapIfNeededWithContext(node.consequent, node, "consequent", ctx);
-      const alternate = wrapIfNeededWithContext(node.alternate, node, "alternate", ctx);
+      const test = wrapIfNeededWithContext(rewritten.test, rewritten, "test", ctx, options);
+      const consequent = wrapIfNeededWithContext(rewritten.consequent, rewritten, "consequent", ctx, options);
+      const alternate = wrapIfNeededWithContext(rewritten.alternate, rewritten, "alternate", ctx, options);
       return `${test}?${consequent}:${alternate}`;
     }
 
     case "MemberExpr": {
-      const object = wrapIfNeededWithContext(node.object, node, "object", ctx);
-      const property = generateWithContext(node.property, ctx);
-      const accessor = node.optional ? "?." : node.computed ? "" : ".";
-      return node.computed ? `${object}${accessor}[${property}]` : `${object}${accessor}${property}`;
+      const object = wrapIfNeededWithContext(rewritten.object, rewritten, "object", ctx, options);
+      const property = generateWithContext(rewritten.property, ctx, options);
+      const accessor = rewritten.optional ? "?." : rewritten.computed ? "" : ".";
+      return rewritten.computed ? `${object}${accessor}[${property}]` : `${object}${accessor}${property}`;
     }
 
     case "CallExpr": {
-      const callee = wrapIfNeededWithContext(node.callee, node, "callee", ctx);
-      const args = node.arguments.map((arg) => generateWithContext(arg, ctx)).join(",");
-      const isNew = node.callee.type === "Identifier" && BUILTIN_CONSTRUCTORS.has(node.callee.name);
+      const callee = wrapIfNeededWithContext(rewritten.callee, rewritten, "callee", ctx, options);
+      const args = rewritten.arguments.map((arg) => generateWithContext(arg, ctx, options)).join(",");
+      const isNew = rewritten.callee.type === "Identifier" && BUILTIN_CONSTRUCTORS.has(rewritten.callee.name);
       const prefix = isNew ? "new " : "";
-      const optional = node.optional ? "?." : "";
+      const optional = rewritten.optional ? "?." : "";
       return `${prefix}${callee}${optional}(${args})`;
     }
 
     case "ArrayExpr":
-      return `[${node.elements.map((el) => generateWithContext(el, ctx)).join(",")}]`;
+      return `[${rewritten.elements.map((el) => generateWithContext(el, ctx, options)).join(",")}]`;
 
     case "ObjectExpr": {
-      const props = node.properties.map((prop) => {
-        if (prop.shorthand) return generateWithContext(prop.key, ctx);
-        const key = prop.computed ? `[${generateWithContext(prop.key, ctx)}]` : generateWithContext(prop.key, ctx);
-        return `${key}:${generateWithContext(prop.value, ctx)}`;
+      const props = rewritten.properties.map((prop) => {
+        if (prop.shorthand) return generateWithContext(prop.key, ctx, options);
+        const key = prop.computed
+          ? `[${generateWithContext(prop.key, ctx, options)}]`
+          : generateWithContext(prop.key, ctx, options);
+        return `${key}:${generateWithContext(prop.value, ctx, options)}`;
       });
       return `{${props.join(",")}}`;
     }
 
     case "ArrowFunctionExpr":
-      return generateArrowFunction(node, ctx);
+      return generateArrowFunction(rewritten, ctx, options);
 
     default: {
-      const unknownNode = node as { type?: string };
+      const unknownNode = rewritten as { type?: string };
       throw new Error(`Unknown node type: ${unknownNode.type ?? "unknown"}`);
     }
   }
@@ -132,7 +140,8 @@ function generateArrowFunction(
     params: ({ type: "Identifier"; name: string } | { type: "Placeholder"; id: symbol })[];
     body: ASTNode;
   },
-  ctx: GenerateContext
+  ctx: GenerateContext,
+  options: GenerateOptions
 ): string {
   const allocatedParams: { id: symbol; name: string }[] = [];
   const paramNames: string[] = [];
@@ -151,7 +160,9 @@ function generateArrowFunction(
 
   const paramsStr = paramNames.length === 1 ? paramNames[0]! : `(${paramNames.join(",")})`;
   const bodyStr =
-    node.body.type === "ObjectExpr" ? `(${generateWithContext(node.body, ctx)})` : generateWithContext(node.body, ctx);
+    node.body.type === "ObjectExpr"
+      ? `(${generateWithContext(node.body, ctx, options)})`
+      : generateWithContext(node.body, ctx, options);
 
   // 清理分配的参数名（退出作用域）
   for (const { id, name } of allocatedParams) {
@@ -180,11 +191,13 @@ export function wrapIfNeededWithContext(
   child: ASTNode,
   parent: ASTNode,
   position: "left" | "right" | "argument" | "object" | "callee" | "test" | "consequent" | "alternate",
-  ctx: GenerateContext
+  ctx: GenerateContext,
+  options: GenerateOptions = {}
 ): string {
-  const code = generateWithContext(child, ctx);
+  const rewrittenChild = options.rewriteNode?.(child, ctx) ?? child;
+  const code = generateWithContext(rewrittenChild, ctx, options);
 
-  if (needsParens(child, parent, position)) {
+  if (needsParens(rewrittenChild, parent, position)) {
     return `(${code})`;
   }
   return code;

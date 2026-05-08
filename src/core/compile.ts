@@ -482,63 +482,6 @@ function mapObjectProperties<T>(properties: T[], transform: (property: T) => T):
  * 提取 AST 中所有 ArrowFunctionExpr 节点，编译为 FnNode，
  * 并将原始位置替换为 $[N] 标识符引用。
  */
-function extractAndCompileArrowFunctions(node: ASTNode, ctx: CompileCtx): ASTNode {
-  switch (node.type) {
-    case "ArrowFunctionExpr": {
-      const idx = compileArrowFunction(node, ctx);
-      return { type: "Identifier", name: `$[${idx}]` };
-    }
-
-    case "BinaryExpr":
-      return {
-        ...node,
-        left: extractAndCompileArrowFunctions(node.left, ctx),
-        right: extractAndCompileArrowFunctions(node.right, ctx),
-      };
-
-    case "UnaryExpr":
-      return { ...node, argument: extractAndCompileArrowFunctions(node.argument, ctx) };
-
-    case "ConditionalExpr":
-      return {
-        ...node,
-        test: extractAndCompileArrowFunctions(node.test, ctx),
-        consequent: extractAndCompileArrowFunctions(node.consequent, ctx),
-        alternate: extractAndCompileArrowFunctions(node.alternate, ctx),
-      };
-
-    case "MemberExpr":
-      return {
-        ...node,
-        object: extractAndCompileArrowFunctions(node.object, ctx),
-        property: node.computed ? extractAndCompileArrowFunctions(node.property, ctx) : node.property,
-      };
-
-    case "CallExpr":
-      return {
-        ...node,
-        callee: extractAndCompileArrowFunctions(node.callee, ctx),
-        arguments: node.arguments.map((arg) => extractAndCompileArrowFunctions(arg, ctx)),
-      };
-
-    case "ArrayExpr":
-      return { ...node, elements: node.elements.map((el) => extractAndCompileArrowFunctions(el, ctx)) };
-
-    case "ObjectExpr":
-      return {
-        ...node,
-        properties: node.properties.map((prop) => ({
-          ...prop,
-          key: prop.computed ? extractAndCompileArrowFunctions(prop.key, ctx) : prop.key,
-          value: extractAndCompileArrowFunctions(prop.value, ctx),
-        })),
-      };
-
-    default:
-      return node;
-  }
-}
-
 function compileAst(node: ASTNode, ctx: CompileCtx): number {
   if (node.type === "BinaryExpr" && (node.operator === "||" || node.operator === "&&" || node.operator === "??")) {
     return compileShortCircuit(node, ctx);
@@ -550,10 +493,13 @@ function compileAst(node: ASTNode, ctx: CompileCtx): number {
     return compileArrowFunction(node, ctx);
   }
 
-  // 提取并编译嵌套的箭头函数，替换为 $[N] 引用
-  const processed = extractAndCompileArrowFunctions(node, ctx);
-
-  const exprStr = generate(processed);
+  const exprStr = generate(node, {
+    rewriteNode: (current) => {
+      if (current.type !== "ArrowFunctionExpr") return current;
+      const idx = compileArrowFunction(current, ctx);
+      return { type: "Identifier", name: `$[${idx}]` };
+    },
+  });
   currentExprs(ctx).push(exprStr);
   return ctx.nextIndex++;
 }
