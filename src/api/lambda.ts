@@ -96,7 +96,7 @@ export function lambda<Args extends unknown[], R>(builder: LambdaBuilder<Args, R
     });
   }
 
-  return lambdaProxy as Lambda<Args, R>;
+  return lambdaProxy;
 }
 
 /**

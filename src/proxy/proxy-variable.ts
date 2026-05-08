@@ -3,13 +3,10 @@ import type { Proxify } from "../types";
 import type {
   ArrayExpr,
   ASTNode,
-  BooleanLiteral,
   CallExpr,
   Identifier,
   MemberExpr,
-  NullLiteral,
   NumberLiteral,
-  ObjectExpr,
   Placeholder,
   StringLiteral,
 } from "../types/ast-types";
@@ -205,13 +202,13 @@ export function serializeArgumentToAST(arg: unknown): ASTNode {
       const key: ASTNode = isValidIdentifier ? identifier(k) : stringLiteral(k);
       return { key, value: serializeArgumentToAST(v), computed: false, shorthand: false };
     });
-    return { type: "ObjectExpr", properties } as ObjectExpr;
+    return { type: "ObjectExpr", properties };
   }
 
   // 4. 原始值
-  if (arg === null) return { type: "NullLiteral" } as NullLiteral;
+  if (arg === null) return { type: "NullLiteral" };
   if (arg === undefined) return identifier("undefined");
-  if (typeof arg === "boolean") return { type: "BooleanLiteral", value: arg } as BooleanLiteral;
+  if (typeof arg === "boolean") return { type: "BooleanLiteral", value: arg };
   if (typeof arg === "number") return numberLiteral(arg);
   if (typeof arg === "string") return stringLiteral(arg);
   if (typeof arg === "bigint") return callExpr(identifier("BigInt"), [stringLiteral(arg.toString())]);

@@ -1,6 +1,6 @@
 import { collectDepsFromArgs, createProxyExpressionWithAST, serializeArgumentToAST } from "../proxy/proxy-variable";
 import type { Proxify } from "../types";
-import type { ASTNode, BinaryExpr, StringLiteral } from "../types/ast-types";
+import type { ASTNode, StringLiteral } from "../types/ast-types";
 
 /**
  * Tagged template 函数，用于创建包含变量的字符串表达式
@@ -33,7 +33,7 @@ export function t(strings: TemplateStringsArray, ...values: unknown[]): Proxify<
         type: "StringLiteral",
         value: str,
         quote: '"',
-      } as StringLiteral);
+      });
     }
 
     if (i < values.length) {
@@ -66,7 +66,7 @@ export function t(strings: TemplateStringsArray, ...values: unknown[]): Proxify<
       operator: "+",
       left: resultAst,
       right: parts[i]!,
-    } as BinaryExpr;
+    };
   }
 
   return createProxyExpressionWithAST<string>(resultAst, deps);

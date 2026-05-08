@@ -92,7 +92,7 @@ export function expr<TContext extends Record<string, unknown>>(
     }
 
     // 解析用户输入的字符串为 AST
-    const ast = parse(source as string);
+    const ast = parse(source);
 
     // 统计每个标识符的引用次数，用于决定是否内联
     const refCounts = new Map<string, number>();

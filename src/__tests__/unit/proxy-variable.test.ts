@@ -8,7 +8,7 @@ describe("代理变量 单元测试", () => {
   test("创建代理变量", () => {
     const x = variable<number>();
     expect(typeof x).toBe("function"); // Proxy wraps function
-    const meta = getProxyMetadata(x as object);
+    const meta = getProxyMetadata(x);
     expect(meta?.type).toBe("variable");
   });
 
@@ -20,7 +20,7 @@ describe("代理变量 单元测试", () => {
     const config = variable<Config>();
     const timeout = config.timeout;
 
-    const meta = getProxyMetadata(timeout as object);
+    const meta = getProxyMetadata(timeout);
     expect(meta?.type).toBe("expression");
     expect(meta?.ast).toBeDefined();
     if (meta?.ast) {
@@ -47,7 +47,7 @@ describe("代理变量 单元测试", () => {
     const builder = variable<Builder>();
     const result = builder.build("test");
 
-    const meta = getProxyMetadata(result as object);
+    const meta = getProxyMetadata(result);
     expect(meta?.type).toBe("expression");
     expect(meta?.ast).toBeDefined();
     if (meta?.ast) {
@@ -153,7 +153,7 @@ describe("代理变量 单元测试", () => {
     const ui = variable<UI>();
     const configured = ui.configure({ padding: 10, margin: 5 });
 
-    const meta = getProxyMetadata(configured as object);
+    const meta = getProxyMetadata(configured);
     expect(meta?.ast).toBeDefined();
     if (meta?.ast) {
       const source = generate(meta.ast);

@@ -25,7 +25,7 @@ let variableCounter = 0;
 export function variable<T>(): Variable<T> {
   const id = Symbol(`var_${variableCounter++}`);
   const proxy = createProxyVariable<T>(id);
-  variableIds.set(proxy as object, id);
+  variableIds.set(proxy, id);
   return proxy;
 }
 

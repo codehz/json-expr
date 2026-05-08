@@ -9,7 +9,7 @@ describe("模板标签 单元测试", () => {
     const name = variable<string>();
     const greeting = t`Hello, ${name}!`;
 
-    const meta = getProxyMetadata(greeting as object);
+    const meta = getProxyMetadata(greeting);
     expect(meta?.type).toBe("expression");
     expect(meta?.ast).toBeDefined();
     if (meta?.ast) {

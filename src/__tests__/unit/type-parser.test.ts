@@ -121,7 +121,7 @@ describe("type-parser 单元测试", () => {
       const _y = variable<number>();
 
       const _sum = expr({ x: _x, y: _y })("x + y");
-      const meta = getProxyMetadata(_sum as object);
+      const meta = getProxyMetadata(_sum);
 
       // 验证元数据
       expect(meta?.type).toBe("expression");
@@ -134,7 +134,7 @@ describe("type-parser 单元测试", () => {
 
       const _sum = expr({ x: _x, y: _y })("x + y");
       const _doubled = expr({ sum: _sum })("sum * 2");
-      const meta = getProxyMetadata(_doubled as object);
+      const meta = getProxyMetadata(_doubled);
 
       expect(meta?.type).toBe("expression");
       expect(meta?.ast).toBeDefined();
@@ -144,7 +144,7 @@ describe("type-parser 单元测试", () => {
       const _age = variable<number>();
 
       const _isAdult = expr({ age: _age })("age >= 18");
-      const meta = getProxyMetadata(_isAdult as object);
+      const meta = getProxyMetadata(_isAdult);
 
       expect(meta?.type).toBe("expression");
       expect(meta?.ast).toBeDefined();
@@ -156,7 +156,7 @@ describe("type-parser 单元测试", () => {
 
       // (x + y) * 2 - 1
       const _complex = expr({ x: _x, y: _y })("(x + y) * 2 - 1");
-      const meta = getProxyMetadata(_complex as object);
+      const meta = getProxyMetadata(_complex);
 
       expect(meta?.type).toBe("expression");
       expect(meta?.ast).toBeDefined();
@@ -167,7 +167,7 @@ describe("type-parser 单元测试", () => {
       const _b = variable<boolean>();
 
       const _result = expr({ a: _a, b: _b })("a && b || !a");
-      const meta = getProxyMetadata(_result as object);
+      const meta = getProxyMetadata(_result);
 
       // 逻辑表达式最终返回 boolean
       expect(meta?.type).toBe("expression");
@@ -179,7 +179,7 @@ describe("type-parser 单元测试", () => {
       const _lastName = variable<string>();
 
       const _fullName = expr({ firstName: _firstName, lastName: _lastName })("firstName + lastName");
-      const meta = getProxyMetadata(_fullName as object);
+      const meta = getProxyMetadata(_fullName);
 
       expect(meta?.type).toBe("expression");
       expect(meta?.ast).toBeDefined();
@@ -195,8 +195,8 @@ describe("type-parser 单元测试", () => {
       const _sum = expr({ x: _x, y: _y })("x + y");
       const _isPositive = expr({ sum: _sum })("sum > 0");
 
-      const sumMeta = getProxyMetadata(_sum as object);
-      const isPositiveMeta = getProxyMetadata(_isPositive as object);
+      const sumMeta = getProxyMetadata(_sum);
+      const isPositiveMeta = getProxyMetadata(_isPositive);
 
       expect(sumMeta?.type).toBe("expression");
       expect(isPositiveMeta?.type).toBe("expression");
