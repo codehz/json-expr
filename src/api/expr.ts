@@ -1,9 +1,9 @@
-import { countIdentifierReferences, transformIdentifiers } from "../core/generate";
+import { transformExprIdentifiers, transformExprVariables } from "../core/generate";
 import { parse } from "../core/parser";
 import { getProxyMetadata } from "../proxy/proxy-metadata";
 import { createProxyExpressionWithAST } from "../proxy/proxy-variable";
 import type { Proxify } from "../types";
-import type { ASTNode, Placeholder } from "../types/ast-types";
+import type { ASTNode } from "../types/ast-types";
 import type { InferExpressionResult, ValidateExpression } from "../types/type-parser";
 import { getVariableId } from "./variable";
 
@@ -45,6 +45,8 @@ export function expr<TContext extends Record<string, unknown>>(
 
     // 建立 变量名 -> Symbol 的映射
     const nameToId = new Map<string, symbol>();
+    // 建立变量名到子表达式 AST 的映射（用于 Proxy expression）
+    const nameToExprAST = new Map<string, ASTNode>();
 
     for (const [name, value] of Object.entries(context)) {
       // 检查是否是 Proxy variable（包括通过 variable() 创建的和 lambda 参数）
@@ -73,18 +75,7 @@ export function expr<TContext extends Record<string, unknown>>(
             deps.add(dep);
           }
         }
-      }
-    }
 
-    // 建立变量名到子表达式 AST 的映射（用于 Proxy expression）
-    const nameToExprAST = new Map<string, ASTNode>();
-    for (const [name, value] of Object.entries(context)) {
-      // 注意：Proxy 包装函数，typeof 返回 'function'
-      if ((typeof value === "object" || typeof value === "function") && value !== null) {
-        // 跳过已经在 nameToId 中的变量
-        if (nameToId.has(name)) continue;
-
-        const meta = getProxyMetadata(value);
         if (meta?.ast) {
           nameToExprAST.set(name, meta.ast);
         }
@@ -94,42 +85,11 @@ export function expr<TContext extends Record<string, unknown>>(
     // 解析用户输入的字符串为 AST
     const ast = parse(source);
 
-    // 统计每个标识符的引用次数，用于决定是否内联
-    const refCounts = new Map<string, number>();
-    countIdentifierReferences(ast, refCounts);
+    const { ast: transformedAst, deferredAsts } =
+      nameToExprAST.size === 0
+        ? { ast: transformExprVariables(ast, nameToId), deferredAsts: undefined }
+        : transformExprIdentifiers(ast, nameToId, nameToExprAST);
 
-    // 收集推迟编译的子表达式 AST（因引用次数 > 1 而未内联）
-    const deferredAsts = new Map<string, ASTNode>();
-
-    // 在 AST 级别进行标识符替换
-    const transformedAst = transformIdentifiers(ast, (name): string | ASTNode => {
-      // 检查是否是 context 中的变量
-      const id = nameToId.get(name);
-      if (id) {
-        // 返回占位符节点
-        return { type: "Placeholder", id } satisfies Placeholder;
-      }
-
-      // 检查是否是子表达式
-      const exprAST = nameToExprAST.get(name);
-      if (exprAST) {
-        // 引用计数 > 1 则推迟编译，否则内联
-        const rc = refCounts.get(name) ?? 0;
-        if (rc <= 1) {
-          return exprAST;
-        }
-        deferredAsts.set(name, exprAST);
-        return name;
-      }
-
-      // 保持原样（可能是全局对象如 Math, JSON 等）
-      return name;
-    });
-
-    return createProxyExpressionWithAST<InferExpressionResult<TSource, TContext>>(
-      transformedAst,
-      deps,
-      deferredAsts.size > 0 ? deferredAsts : undefined
-    );
+    return createProxyExpressionWithAST<InferExpressionResult<TSource, TContext>>(transformedAst, deps, deferredAsts);
   };
 }

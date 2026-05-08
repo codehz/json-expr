@@ -2,7 +2,7 @@
  * 代码生成逻辑
  */
 
-import type { ASTNode } from "../types/ast-types.js";
+import type { ASTNode, Placeholder } from "../types/ast-types.js";
 import { BUILTIN_CONSTRUCTORS, PRECEDENCE, RIGHT_ASSOCIATIVE } from "../types/ast-types.js";
 
 /**
@@ -18,6 +18,11 @@ export interface GenerateContext {
 
 export interface GenerateOptions {
   rewriteNode?: (node: ASTNode, ctx: GenerateContext) => ASTNode;
+}
+
+export interface ExprIdentifierTransformResult {
+  ast: ASTNode;
+  deferredAsts?: Map<string, ASTNode>;
 }
 
 /**
@@ -326,6 +331,44 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
 }
 
 /**
+ * expr() 专用：将 context 中的变量替换为 Placeholder。
+ */
+export function transformExprVariables(node: ASTNode, nameToId: ReadonlyMap<string, symbol>): ASTNode {
+  return transformIdentifiers(node, (name) => {
+    const id = nameToId.get(name);
+    return id ? ({ type: "Placeholder", id } satisfies Placeholder) : name;
+  });
+}
+
+/**
+ * expr() 专用：单次遍历完成变量替换、子表达式引用计数和延迟编译收集。
+ */
+export function transformExprIdentifiers(
+  node: ASTNode,
+  nameToId: ReadonlyMap<string, symbol>,
+  nameToExprAST: ReadonlyMap<string, ASTNode>
+): ExprIdentifierTransformResult {
+  const refCounts = new Map<string, number>();
+  const candidateRefs = new Map<string, ASTNode[]>();
+
+  const ast = transformExprIdentifiersWithScope(node, nameToId, nameToExprAST, refCounts, candidateRefs);
+  let deferredAsts: Map<string, ASTNode> | undefined;
+
+  for (const [name, refs] of candidateRefs) {
+    const count = refCounts.get(name) ?? 0;
+    if (count <= 1) {
+      replaceNode(refs[0]!, nameToExprAST.get(name)!);
+      continue;
+    }
+
+    if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+    deferredAsts.set(name, nameToExprAST.get(name)!);
+  }
+
+  return { ast, deferredAsts };
+}
+
+/**
  * 转换 AST 中的占位符节点
  * 回调函数接收 symbol，返回 Identifier 节点的名称
  * 如果返回 null/undefined，则保留原始 Placeholder 节点
@@ -444,75 +487,6 @@ function mapObjectProperties<T>(properties: T[], transform: (property: T) => T):
 }
 
 /**
- * 统计 AST 中各标识符名称的出现次数
- * 用于判断子表达式是否应该内联（引用次数 = 1 则内联，> 1 则推迟为独立编译）
- */
-export function countIdentifierReferences(node: ASTNode, counts: Map<string, number>): void {
-  switch (node.type) {
-    case "Identifier":
-      counts.set(node.name, (counts.get(node.name) ?? 0) + 1);
-      break;
-
-    case "Placeholder":
-      break;
-
-    case "BinaryExpr":
-      countIdentifierReferences(node.left, counts);
-      countIdentifierReferences(node.right, counts);
-      break;
-
-    case "UnaryExpr":
-      countIdentifierReferences(node.argument, counts);
-      break;
-
-    case "ConditionalExpr":
-      countIdentifierReferences(node.test, counts);
-      countIdentifierReferences(node.consequent, counts);
-      countIdentifierReferences(node.alternate, counts);
-      break;
-
-    case "MemberExpr":
-      countIdentifierReferences(node.object, counts);
-      if (node.computed) countIdentifierReferences(node.property, counts);
-      break;
-
-    case "CallExpr":
-      countIdentifierReferences(node.callee, counts);
-      for (const arg of node.arguments) countIdentifierReferences(arg, counts);
-      break;
-
-    case "ArrayExpr":
-      for (const el of node.elements) countIdentifierReferences(el, counts);
-      break;
-
-    case "ObjectExpr":
-      for (const prop of node.properties) {
-        if (prop.computed) countIdentifierReferences(prop.key, counts);
-        countIdentifierReferences(prop.value, counts);
-      }
-      break;
-
-    case "ArrowFunctionExpr":
-      // 函数体内的标识符计数：排除参数名
-      {
-        const paramNames = new Set(
-          node.params
-            .filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier")
-            .map((p) => p.name)
-        );
-        const bodyCounts = new Map<string, number>();
-        countIdentifierReferences(node.body, bodyCounts);
-        for (const [name, count] of bodyCounts) {
-          if (!paramNames.has(name)) {
-            counts.set(name, (counts.get(name) ?? 0) + count);
-          }
-        }
-      }
-      break;
-  }
-}
-
-/**
  * 收集 AST 中所有使用的标识符名称（自由变量）
  */
 export function collectIdentifiers(node: ASTNode): Set<string> {
@@ -593,6 +567,203 @@ export function collectIdentifiers(node: ASTNode): Set<string> {
     default:
       return new Set();
   }
+}
+
+function transformExprIdentifiersWithScope(
+  node: ASTNode,
+  nameToId: ReadonlyMap<string, symbol>,
+  nameToExprAST: ReadonlyMap<string, ASTNode>,
+  refCounts: Map<string, number>,
+  candidateRefs: Map<string, ASTNode[]>,
+  shadowedNames?: ReadonlySet<string>
+): ASTNode {
+  switch (node.type) {
+    case "Identifier": {
+      if (shadowedNames?.has(node.name)) return node;
+
+      const id = nameToId.get(node.name);
+      if (id) {
+        return { type: "Placeholder", id } satisfies Placeholder;
+      }
+
+      const exprAST = nameToExprAST.get(node.name);
+      if (!exprAST) return node;
+
+      refCounts.set(node.name, (refCounts.get(node.name) ?? 0) + 1);
+      const candidateNode: ASTNode = { ...node };
+      const refs = candidateRefs.get(node.name);
+      if (refs) {
+        refs.push(candidateNode);
+      } else {
+        candidateRefs.set(node.name, [candidateNode]);
+      }
+      return candidateNode;
+    }
+
+    case "Placeholder":
+      return node;
+
+    case "BinaryExpr": {
+      const left = transformExprIdentifiersWithScope(
+        node.left,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      const right = transformExprIdentifiersWithScope(
+        node.right,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      return left === node.left && right === node.right ? node : { ...node, left, right };
+    }
+
+    case "UnaryExpr": {
+      const argument = transformExprIdentifiersWithScope(
+        node.argument,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      return argument === node.argument ? node : { ...node, argument };
+    }
+
+    case "ConditionalExpr": {
+      const test = transformExprIdentifiersWithScope(
+        node.test,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      const consequent = transformExprIdentifiersWithScope(
+        node.consequent,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      const alternate = transformExprIdentifiersWithScope(
+        node.alternate,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      return test === node.test && consequent === node.consequent && alternate === node.alternate
+        ? node
+        : { ...node, test, consequent, alternate };
+    }
+
+    case "MemberExpr": {
+      const object = transformExprIdentifiersWithScope(
+        node.object,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      const property = node.computed
+        ? transformExprIdentifiersWithScope(
+            node.property,
+            nameToId,
+            nameToExprAST,
+            refCounts,
+            candidateRefs,
+            shadowedNames
+          )
+        : node.property;
+      return object === node.object && property === node.property ? node : { ...node, object, property };
+    }
+
+    case "CallExpr": {
+      const callee = transformExprIdentifiersWithScope(
+        node.callee,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        shadowedNames
+      );
+      const arguments_ = mapAstNodes(node.arguments, (arg) =>
+        transformExprIdentifiersWithScope(arg, nameToId, nameToExprAST, refCounts, candidateRefs, shadowedNames)
+      );
+      return callee === node.callee && arguments_ === node.arguments
+        ? node
+        : { ...node, callee, arguments: arguments_ };
+    }
+
+    case "ArrayExpr": {
+      const elements = mapAstNodes(node.elements, (el) =>
+        transformExprIdentifiersWithScope(el, nameToId, nameToExprAST, refCounts, candidateRefs, shadowedNames)
+      );
+      return elements === node.elements ? node : { ...node, elements };
+    }
+
+    case "ObjectExpr": {
+      const properties = mapObjectProperties(node.properties, (prop) => {
+        const key = prop.computed
+          ? transformExprIdentifiersWithScope(
+              prop.key,
+              nameToId,
+              nameToExprAST,
+              refCounts,
+              candidateRefs,
+              shadowedNames
+            )
+          : prop.key;
+        const value = transformExprIdentifiersWithScope(
+          prop.value,
+          nameToId,
+          nameToExprAST,
+          refCounts,
+          candidateRefs,
+          shadowedNames
+        );
+        return key === prop.key && value === prop.value ? prop : { ...prop, key, value };
+      });
+      return properties === node.properties ? node : { ...node, properties };
+    }
+
+    case "ArrowFunctionExpr": {
+      const paramNames = node.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier");
+      const nextShadowedNames =
+        paramNames.length === 0
+          ? shadowedNames
+          : new Set([...(shadowedNames ?? []), ...paramNames.map((param) => param.name)]);
+      const body = transformExprIdentifiersWithScope(
+        node.body,
+        nameToId,
+        nameToExprAST,
+        refCounts,
+        candidateRefs,
+        nextShadowedNames
+      );
+      return body === node.body ? node : { ...node, body };
+    }
+
+    default:
+      return node;
+  }
+}
+
+function replaceNode(target: ASTNode, replacement: ASTNode): void {
+  const record = target as unknown as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    delete record[key];
+  }
+  Object.assign(record, replacement);
 }
 
 /** 合并多个 Set */

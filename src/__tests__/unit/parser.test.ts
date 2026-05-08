@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { collectIdentifiers, generate, transformIdentifiers } from "../../core/generate";
+import {
+  collectIdentifiers,
+  generate,
+  transformExprIdentifiers,
+  transformExprVariables,
+  transformIdentifiers,
+} from "../../core/generate";
 import { parse } from "../../core/parser";
 
 describe("parser 单元测试", () => {
@@ -199,6 +205,34 @@ describe("parser 单元测试", () => {
       const ast = parse("obj[key]");
       const transformed = transformIdentifiers(ast, (name) => `$${name}`);
       expect(generate(transformed)).toBe("$obj[$key]");
+    });
+
+    test("expr 变量快路径只替换变量", () => {
+      const ast = parse("x + Math.max(y, z)");
+      const transformed = transformExprVariables(
+        ast,
+        new Map([
+          ["x", Symbol("x")],
+          ["y", Symbol("y")],
+        ])
+      );
+      expect(generate(transformed)).toBe("$$x$$+Math.max($$y$$,z)");
+    });
+
+    test("expr 单次遍历在 lambda 中保留参数遮蔽", () => {
+      const ast = parse("value => value + outer + shared");
+      const outerExpr = parse("a + b");
+      const transformed = transformExprIdentifiers(
+        ast,
+        new Map([["shared", Symbol("shared")]]),
+        new Map([
+          ["outer", outerExpr],
+          ["value", parse("shouldNotAppear")],
+        ])
+      );
+
+      expect(generate(transformed.ast)).toBe("value=>value+(a+b)+$$shared$$");
+      expect(transformed.deferredAsts).toBeUndefined();
     });
   });
 
