@@ -281,61 +281,54 @@ function translateControlFlow(expressions: CompiledExpression[], variableCount: 
  * ```
  */
 export function evaluate<TResult = unknown>(data: CompiledData, values: Record<string, unknown>): TResult {
-  if (data.length < 1) {
-    throw new Error("Invalid compiled data: must have at least variable names");
-  }
-
-  const [variableNames, ...expressions] = data;
-
-  if (!Array.isArray(variableNames)) {
-    throw new Error("Invalid compiled data: first element must be variable names array");
-  }
-
-  // 验证所有必需的变量都已提供
-  for (const varName of variableNames) {
-    if (typeof varName !== "string") {
-      throw new Error("Invalid compiled data: variable names must be strings");
-    }
-    if (!(varName in values)) {
-      throw new Error(`Missing required variable: ${varName}`);
-    }
-  }
-
-  // 创建值数组，按变量名顺序填入传入的值
-  const valueArray: unknown[] = [];
-  for (const varName of variableNames) {
-    valueArray.push(values[varName]);
-  }
-
-  // 获取或构造求值函数（混合缓存策略）
-  // 1. 先尝试一级缓存（WeakMap - 对象引用匹配，O(1)，无序列化开销）
+  // 一级缓存：WeakMap 命中时跳过结构性校验（数据结构不会变）
   let evaluator = weakEvaluatorCache.get(data);
+  let variableNames: string[];
 
-  if (!evaluator) {
-    // 2. 回退到二级缓存（LRU - 内容匹配，处理引用不同但内容相同的场景）
+  if (evaluator) {
+    variableNames = data[0];
+  } else {
+    if (data.length < 1) {
+      throw new Error("Invalid compiled data: must have at least variable names");
+    }
+    variableNames = data[0];
+    if (!Array.isArray(variableNames)) {
+      throw new Error("Invalid compiled data: first element must be variable names array");
+    }
+    for (let i = 0; i < variableNames.length; i++) {
+      if (typeof variableNames[i] !== "string") {
+        throw new Error("Invalid compiled data: variable names must be strings");
+      }
+    }
+
+    // 二级缓存：LRU 内容匹配
     const cacheKey = JSON.stringify(data);
     evaluator = getFromLruCache(cacheKey);
 
     if (!evaluator) {
-      // 3. 缓存未命中，编译生成求值函数
+      const expressions = data.slice(1) as CompiledExpression[];
       const functionBody = buildEvaluatorFunctionBody(expressions, variableNames.length);
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       evaluator = new Function("$", functionBody) as (values: unknown[]) => unknown;
-
-      // 4. 写入两级缓存
-      weakEvaluatorCache.set(data, evaluator);
       setToLruCache(cacheKey, evaluator);
-    } else {
-      // LRU 命中但 WeakMap 未命中：可能是内容相同但引用不同的 CompiledData
-      // 将结果写入 WeakMap，下次相同引用可直接命中
-      weakEvaluatorCache.set(data, evaluator);
     }
+
+    weakEvaluatorCache.set(data, evaluator);
   }
 
-  // 执行求值函数
+  // 单次遍历：验证存在性 + 构造取值数组
+  const len = variableNames.length;
+  const valueArray: unknown[] = [];
+  for (let i = 0; i < len; i++) {
+    const name = variableNames[i]!;
+    if (!(name in values)) {
+      throw new Error(`Missing required variable: ${name}`);
+    }
+    valueArray.push(values[name]);
+  }
+
   try {
-    const result = evaluator(valueArray);
-    return result as TResult;
+    return evaluator(valueArray) as TResult;
   } catch (error) {
     throw new Error(`Failed to evaluate expression: ${error instanceof Error ? error.message : String(error)}`);
   }

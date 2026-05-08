@@ -97,7 +97,7 @@ console.log("场景 3：大量不同表达式（LRU 淘汰策略）");
 console.log("场景 4：复杂表达式（短路求值）");
 {
   const cond = expr({ x, y })("x > 0 && y > 0");
-  const result = expr({ cond })("cond ? x * y : 0");
+  const result = expr({ cond, x, y })("cond ? x * y : 0");
   const compiled = compile(result, { x, y });
 
   const iterations = 500_000;
