@@ -1,9 +1,48 @@
 import type { CompiledData, CompiledExpression, ControlFlowNode, FnNode, JumpNode } from "../types";
 
 /**
- * 缓存已构造的求值函数，以提升重复执行性能
+ * 一级缓存：WeakMap - 使用 CompiledData 对象引用作为 key
+ * 优势：O(1) 查找，无序列化开销，自动 GC
+ * 适用：相同引用被重复使用的场景
  */
-const evaluatorCache = new Map<string, (values: unknown[]) => unknown>();
+const weakEvaluatorCache = new WeakMap<CompiledData, (values: unknown[]) => unknown>();
+
+/**
+ * 二级缓存：LRU Map - 使用编译数据指纹作为 key
+ * 优势：支持内容相同但引用不同的对象，有大小限制避免内存泄漏
+ * 适用：CompiledData 被频繁重建但内容重复的场景
+ */
+const MAX_LRU_CACHE_SIZE = 128;
+const lruEvaluatorCache = new Map<string, (values: unknown[]) => unknown>();
+
+/**
+ * 从 LRU 缓存获取求值函数，并将命中项移至末尾（最近使用）
+ */
+function getFromLruCache(key: string): ((values: unknown[]) => unknown) | undefined {
+  const evaluator = lruEvaluatorCache.get(key);
+  if (evaluator) {
+    // 移动到末尾（标记为最近使用）
+    lruEvaluatorCache.delete(key);
+    lruEvaluatorCache.set(key, evaluator);
+  }
+  return evaluator;
+}
+
+/**
+ * 向 LRU 缓存写入求值函数，超出限制时淘汰最久未使用的项
+ */
+function setToLruCache(key: string, evaluator: (values: unknown[]) => unknown): void {
+  if (lruEvaluatorCache.has(key)) {
+    lruEvaluatorCache.delete(key);
+  } else if (lruEvaluatorCache.size >= MAX_LRU_CACHE_SIZE) {
+    // 删除第一个元素（最久未使用）
+    const firstKey = lruEvaluatorCache.keys().next().value;
+    if (firstKey !== undefined) {
+      lruEvaluatorCache.delete(firstKey);
+    }
+  }
+  lruEvaluatorCache.set(key, evaluator);
+}
 
 /**
  * 判断是否是 FnNode
@@ -268,15 +307,29 @@ export function evaluate<TResult = unknown>(data: CompiledData, values: Record<s
     valueArray.push(values[varName]);
   }
 
-  // 获取或构造求值函数
-  const cacheKey = JSON.stringify(data);
-  let evaluator = evaluatorCache.get(cacheKey);
+  // 获取或构造求值函数（混合缓存策略）
+  // 1. 先尝试一级缓存（WeakMap - 对象引用匹配，O(1)，无序列化开销）
+  let evaluator = weakEvaluatorCache.get(data);
 
   if (!evaluator) {
-    const functionBody = buildEvaluatorFunctionBody(expressions, variableNames.length);
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    evaluator = new Function("$", functionBody) as (values: unknown[]) => unknown;
-    evaluatorCache.set(cacheKey, evaluator);
+    // 2. 回退到二级缓存（LRU - 内容匹配，处理引用不同但内容相同的场景）
+    const cacheKey = JSON.stringify(data);
+    evaluator = getFromLruCache(cacheKey);
+
+    if (!evaluator) {
+      // 3. 缓存未命中，编译生成求值函数
+      const functionBody = buildEvaluatorFunctionBody(expressions, variableNames.length);
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      evaluator = new Function("$", functionBody) as (values: unknown[]) => unknown;
+
+      // 4. 写入两级缓存
+      weakEvaluatorCache.set(data, evaluator);
+      setToLruCache(cacheKey, evaluator);
+    } else {
+      // LRU 命中但 WeakMap 未命中：可能是内容相同但引用不同的 CompiledData
+      // 将结果写入 WeakMap，下次相同引用可直接命中
+      weakEvaluatorCache.set(data, evaluator);
+    }
   }
 
   // 执行求值函数
