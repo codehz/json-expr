@@ -1,6 +1,6 @@
 {
   "name": "@codehz/json-expr",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "A JSON expression evaluation library",
   "type": "module",
   "main": "./dist/index.mjs",
