@@ -3,7 +3,7 @@ import { getProxyMetadata } from "../proxy/proxy-metadata";
 import { serializeArgumentToAST } from "../proxy/proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, ExprValue, FnNode, JumpNode, PhiNode } from "../types";
 import type { ASTNode } from "../types/ast-types";
-import { generate, transformIdentifiers, transformPlaceholders } from "./generate";
+import { generate, transformPlaceholders } from "./generate";
 
 const ALLOWED_GLOBALS = new Set([
   "Math",
@@ -55,6 +55,13 @@ const BRANCH_CONDITIONS: Record<string, (idx: number) => string> = {
  * 编译选项
  */
 export interface CompileOptions {}
+
+interface ResolveAstOptions {
+  deferredAsts?: Map<string, ASTNode>;
+  deferredIndexMap?: Map<string, number>;
+  onDeferredReference?: (name: string) => number;
+  undefinedVars?: string[];
+}
 
 /**
  * 编译上下文（用于 lambda 参数分配）
@@ -137,32 +144,10 @@ export function compile<TResult>(
     compileDeferredExprs(deferredAsts, ctx, symbolToName, variableToIndex, deferredIndexMap);
   }
 
-  // 转换 Placeholder 节点为 $[N] 格式的 Identifier
-  const placeholderTransformed = transformPlaceholders(ast, (id) => {
-    const name = symbolToName.get(id);
-    if (!name) return null; // 不是变量占位符（可能是 lambda 参数），保留
-    const index = variableToIndex.get(name);
-    return index !== undefined ? `$[${index}]` : null;
-  });
-
-  // 检查是否有未定义的 Identifier（非全局对象、非 deferred）
   const undefinedVars: string[] = [];
-  const transformed = transformIdentifiers(placeholderTransformed, (name) => {
-    // 已经转换为 $[N] 的跳过
-    if (/^\$\[\d+\]$/.test(name)) return name;
-
-    // lambda 参数名 _N 跳过
-    if (/^_\d+$/.test(name)) return name;
-
-    const index = variableToIndex.get(name);
-    if (index !== undefined) return `$[${index}]`;
-
-    // 检查是否是已编译的 deferred 名称
-    const deferredIdx = deferredIndexMap.get(name);
-    if (deferredIdx !== undefined) return `$[${deferredIdx}]`;
-
-    if (!ALLOWED_GLOBALS.has(name)) undefinedVars.push(name);
-    return name;
+  const transformed = resolveAstReferences(ast, symbolToName, variableToIndex, {
+    deferredIndexMap,
+    undefinedVars,
   });
 
   if (undefinedVars.length > 0) {
@@ -206,31 +191,12 @@ function compileDeferredExprs(
 
     processing.add(name);
 
-    // 转换 Placeholder 节点为 $[N]
-    const t1 = transformPlaceholders(ast, (id) => {
-      const vName = symbolToName.get(id);
-      if (!vName) return null;
-      const idx = variableToIndex.get(vName);
-      return idx !== undefined ? `$[${idx}]` : null;
-    });
-
-    // 转换 Identifier 节点，同时递归编译依赖的 deferred 名称
     const undefinedVars: string[] = [];
-    const t2 = transformIdentifiers(t1, (n) => {
-      if (/^\$\[\d+\]$/.test(n)) return n;
-      if (/^_\d+$/.test(n)) return n;
-
-      const varIdx = variableToIndex.get(n);
-      if (varIdx !== undefined) return `$[${varIdx}]`;
-
-      // 检查是否是另一个 deferred 名称（递归编译）
-      if (deferredAsts.has(n)) {
-        const dIdx = compileOne(n);
-        return `$[${dIdx}]`;
-      }
-
-      if (!ALLOWED_GLOBALS.has(n)) undefinedVars.push(n);
-      return n;
+    const transformed = resolveAstReferences(ast, symbolToName, variableToIndex, {
+      deferredAsts,
+      deferredIndexMap,
+      onDeferredReference: compileOne,
+      undefinedVars,
     });
 
     if (undefinedVars.length > 0) {
@@ -239,7 +205,7 @@ function compileDeferredExprs(
       );
     }
 
-    const idx = compileAst(t2, ctx);
+    const idx = compileAst(transformed, ctx);
     deferredIndexMap.set(name, idx);
     processing.delete(name);
     return idx;
@@ -248,6 +214,268 @@ function compileDeferredExprs(
   for (const name of deferredAsts.keys()) {
     compileOne(name);
   }
+}
+
+function resolveAstReferences(
+  node: ASTNode,
+  symbolToName: Map<symbol, string>,
+  variableToIndex: Map<string, number>,
+  options: ResolveAstOptions = {}
+): ASTNode {
+  const placeholderTransformed = transformPlaceholders(node, (id) => {
+    const name = symbolToName.get(id);
+    if (!name) return null;
+    const index = variableToIndex.get(name);
+    return index !== undefined ? `$[${index}]` : null;
+  });
+
+  return resolveIdentifiers(placeholderTransformed, symbolToName, variableToIndex, options);
+}
+
+function resolveIdentifiers(
+  node: ASTNode,
+  _symbolToName: Map<symbol, string>,
+  variableToIndex: Map<string, number>,
+  options: ResolveAstOptions
+): ASTNode {
+  switch (node.type) {
+    case "Identifier": {
+      const resolved = resolveIdentifierName(node.name, variableToIndex, options);
+      return resolved === node.name ? node : { ...node, name: resolved };
+    }
+
+    case "Placeholder":
+      return node;
+
+    case "BinaryExpr": {
+      const left = resolveIdentifiers(node.left, _symbolToName, variableToIndex, options);
+      const right = resolveIdentifiers(node.right, _symbolToName, variableToIndex, options);
+      return left === node.left && right === node.right ? node : { ...node, left, right };
+    }
+
+    case "UnaryExpr": {
+      const argument = resolveIdentifiers(node.argument, _symbolToName, variableToIndex, options);
+      return argument === node.argument ? node : { ...node, argument };
+    }
+
+    case "ConditionalExpr": {
+      const test = resolveIdentifiers(node.test, _symbolToName, variableToIndex, options);
+      const consequent = resolveIdentifiers(node.consequent, _symbolToName, variableToIndex, options);
+      const alternate = resolveIdentifiers(node.alternate, _symbolToName, variableToIndex, options);
+      return test === node.test && consequent === node.consequent && alternate === node.alternate
+        ? node
+        : { ...node, test, consequent, alternate };
+    }
+
+    case "MemberExpr": {
+      const object = resolveIdentifiers(node.object, _symbolToName, variableToIndex, options);
+      const property = node.computed
+        ? resolveIdentifiers(node.property, _symbolToName, variableToIndex, options)
+        : node.property;
+      return object === node.object && property === node.property ? node : { ...node, object, property };
+    }
+
+    case "CallExpr": {
+      const callee = resolveIdentifiers(node.callee, _symbolToName, variableToIndex, options);
+      const arguments_ = mapAstNodes(node.arguments, (arg) =>
+        resolveIdentifiers(arg, _symbolToName, variableToIndex, options)
+      );
+      return callee === node.callee && arguments_ === node.arguments
+        ? node
+        : { ...node, callee, arguments: arguments_ };
+    }
+
+    case "ArrayExpr": {
+      const elements = mapAstNodes(node.elements, (el) =>
+        resolveIdentifiers(el, _symbolToName, variableToIndex, options)
+      );
+      return elements === node.elements ? node : { ...node, elements };
+    }
+
+    case "ObjectExpr": {
+      const properties = mapObjectProperties(node.properties, (prop) => {
+        const key = prop.computed ? resolveIdentifiers(prop.key, _symbolToName, variableToIndex, options) : prop.key;
+        const value = resolveIdentifiers(prop.value, _symbolToName, variableToIndex, options);
+        return key === prop.key && value === prop.value ? prop : { ...prop, key, value };
+      });
+      return properties === node.properties ? node : { ...node, properties };
+    }
+
+    case "ArrowFunctionExpr": {
+      const paramNames = new Set(
+        node.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
+      );
+      const body = resolveIdentifiersWithScope(node.body, _symbolToName, variableToIndex, options, paramNames);
+      return body === node.body ? node : { ...node, body };
+    }
+
+    default:
+      return node;
+  }
+}
+
+function resolveIdentifiersWithScope(
+  node: ASTNode,
+  symbolToName: Map<symbol, string>,
+  variableToIndex: Map<string, number>,
+  options: ResolveAstOptions,
+  shadowedNames: Set<string>
+): ASTNode {
+  switch (node.type) {
+    case "Identifier":
+      return shadowedNames.has(node.name) ? node : resolveIdentifiers(node, symbolToName, variableToIndex, options);
+
+    case "ArrowFunctionExpr": {
+      const nestedShadowed = new Set(shadowedNames);
+      for (const param of node.params) {
+        if (param.type === "Identifier") {
+          nestedShadowed.add(param.name);
+        }
+      }
+      const body = resolveIdentifiersWithScope(node.body, symbolToName, variableToIndex, options, nestedShadowed);
+      return body === node.body ? node : { ...node, body };
+    }
+
+    case "BinaryExpr": {
+      const left = resolveIdentifiersWithScope(node.left, symbolToName, variableToIndex, options, shadowedNames);
+      const right = resolveIdentifiersWithScope(node.right, symbolToName, variableToIndex, options, shadowedNames);
+      return left === node.left && right === node.right ? node : { ...node, left, right };
+    }
+
+    case "UnaryExpr": {
+      const argument = resolveIdentifiersWithScope(
+        node.argument,
+        symbolToName,
+        variableToIndex,
+        options,
+        shadowedNames
+      );
+      return argument === node.argument ? node : { ...node, argument };
+    }
+
+    case "ConditionalExpr": {
+      const test = resolveIdentifiersWithScope(node.test, symbolToName, variableToIndex, options, shadowedNames);
+      const consequent = resolveIdentifiersWithScope(
+        node.consequent,
+        symbolToName,
+        variableToIndex,
+        options,
+        shadowedNames
+      );
+      const alternate = resolveIdentifiersWithScope(
+        node.alternate,
+        symbolToName,
+        variableToIndex,
+        options,
+        shadowedNames
+      );
+      return test === node.test && consequent === node.consequent && alternate === node.alternate
+        ? node
+        : { ...node, test, consequent, alternate };
+    }
+
+    case "MemberExpr": {
+      const object = resolveIdentifiersWithScope(node.object, symbolToName, variableToIndex, options, shadowedNames);
+      const property = node.computed
+        ? resolveIdentifiersWithScope(node.property, symbolToName, variableToIndex, options, shadowedNames)
+        : node.property;
+      return object === node.object && property === node.property ? node : { ...node, object, property };
+    }
+
+    case "CallExpr": {
+      const callee = resolveIdentifiersWithScope(node.callee, symbolToName, variableToIndex, options, shadowedNames);
+      const arguments_ = mapAstNodes(node.arguments, (arg) =>
+        resolveIdentifiersWithScope(arg, symbolToName, variableToIndex, options, shadowedNames)
+      );
+      return callee === node.callee && arguments_ === node.arguments
+        ? node
+        : { ...node, callee, arguments: arguments_ };
+    }
+
+    case "ArrayExpr": {
+      const elements = mapAstNodes(node.elements, (el) =>
+        resolveIdentifiersWithScope(el, symbolToName, variableToIndex, options, shadowedNames)
+      );
+      return elements === node.elements ? node : { ...node, elements };
+    }
+
+    case "ObjectExpr": {
+      const properties = mapObjectProperties(node.properties, (prop) => {
+        const key = prop.computed
+          ? resolveIdentifiersWithScope(prop.key, symbolToName, variableToIndex, options, shadowedNames)
+          : prop.key;
+        const value = resolveIdentifiersWithScope(prop.value, symbolToName, variableToIndex, options, shadowedNames);
+        return key === prop.key && value === prop.value ? prop : { ...prop, key, value };
+      });
+      return properties === node.properties ? node : { ...node, properties };
+    }
+
+    default:
+      return node;
+  }
+}
+
+function resolveIdentifierName(name: string, variableToIndex: Map<string, number>, options: ResolveAstOptions): string {
+  if (/^\$\[\d+\]$/.test(name) || /^_\d+$/.test(name)) {
+    return name;
+  }
+
+  const index = variableToIndex.get(name);
+  if (index !== undefined) return `$[${index}]`;
+
+  const deferredIdx = options.deferredIndexMap?.get(name);
+  if (deferredIdx !== undefined) return `$[${deferredIdx}]`;
+
+  if (options.deferredAsts?.has(name) && options.onDeferredReference) {
+    return `$[${options.onDeferredReference(name)}]`;
+  }
+
+  if (!ALLOWED_GLOBALS.has(name)) {
+    options.undefinedVars?.push(name);
+  }
+  return name;
+}
+
+function mapAstNodes<T extends ASTNode>(nodes: T[], transform: (node: T) => T): T[] {
+  let result: T[] | undefined;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
+    const transformed = transform(node);
+
+    if (result) {
+      result.push(transformed);
+      continue;
+    }
+
+    if (transformed !== node) {
+      result = nodes.slice(0, i);
+      result.push(transformed);
+    }
+  }
+
+  return result ?? nodes;
+}
+
+function mapObjectProperties<T>(properties: T[], transform: (property: T) => T): T[] {
+  let result: T[] | undefined;
+
+  for (let i = 0; i < properties.length; i++) {
+    const property = properties[i]!;
+    const transformed = transform(property);
+
+    if (result) {
+      result.push(transformed);
+      continue;
+    }
+
+    if (transformed !== property) {
+      result = properties.slice(0, i);
+      result.push(transformed);
+    }
+  }
+
+  return result ?? properties;
 }
 
 /**

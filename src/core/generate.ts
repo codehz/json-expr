@@ -241,64 +241,61 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
     case "Identifier": {
       const result = transform(node.name);
       // 如果返回 ASTNode，直接内联；否则替换名称
-      return typeof result === "string" ? { ...node, name: result } : result;
+      if (typeof result !== "string") return result;
+      return result === node.name ? node : { ...node, name: result };
     }
 
     case "Placeholder":
       // Placeholder 不是 Identifier，保持不变
       return node;
 
-    case "BinaryExpr":
-      return {
-        ...node,
-        left: transformIdentifiers(node.left, transform),
-        right: transformIdentifiers(node.right, transform),
-      };
+    case "BinaryExpr": {
+      const left = transformIdentifiers(node.left, transform);
+      const right = transformIdentifiers(node.right, transform);
+      return left === node.left && right === node.right ? node : { ...node, left, right };
+    }
 
-    case "UnaryExpr":
-      return {
-        ...node,
-        argument: transformIdentifiers(node.argument, transform),
-      };
+    case "UnaryExpr": {
+      const argument = transformIdentifiers(node.argument, transform);
+      return argument === node.argument ? node : { ...node, argument };
+    }
 
-    case "ConditionalExpr":
-      return {
-        ...node,
-        test: transformIdentifiers(node.test, transform),
-        consequent: transformIdentifiers(node.consequent, transform),
-        alternate: transformIdentifiers(node.alternate, transform),
-      };
+    case "ConditionalExpr": {
+      const test = transformIdentifiers(node.test, transform);
+      const consequent = transformIdentifiers(node.consequent, transform);
+      const alternate = transformIdentifiers(node.alternate, transform);
+      return test === node.test && consequent === node.consequent && alternate === node.alternate
+        ? node
+        : { ...node, test, consequent, alternate };
+    }
 
-    case "MemberExpr":
-      return {
-        ...node,
-        object: transformIdentifiers(node.object, transform),
-        // 只有 computed 属性需要转换
-        property: node.computed ? transformIdentifiers(node.property, transform) : node.property,
-      };
+    case "MemberExpr": {
+      const object = transformIdentifiers(node.object, transform);
+      const property = node.computed ? transformIdentifiers(node.property, transform) : node.property;
+      return object === node.object && property === node.property ? node : { ...node, object, property };
+    }
 
-    case "CallExpr":
-      return {
-        ...node,
-        callee: transformIdentifiers(node.callee, transform),
-        arguments: node.arguments.map((arg) => transformIdentifiers(arg, transform)),
-      };
+    case "CallExpr": {
+      const callee = transformIdentifiers(node.callee, transform);
+      const arguments_ = mapAstNodes(node.arguments, (arg) => transformIdentifiers(arg, transform));
+      return callee === node.callee && arguments_ === node.arguments
+        ? node
+        : { ...node, callee, arguments: arguments_ };
+    }
 
-    case "ArrayExpr":
-      return {
-        ...node,
-        elements: node.elements.map((el) => transformIdentifiers(el, transform)),
-      };
+    case "ArrayExpr": {
+      const elements = mapAstNodes(node.elements, (el) => transformIdentifiers(el, transform));
+      return elements === node.elements ? node : { ...node, elements };
+    }
 
-    case "ObjectExpr":
-      return {
-        ...node,
-        properties: node.properties.map((prop) => ({
-          ...prop,
-          key: prop.computed ? transformIdentifiers(prop.key, transform) : prop.key,
-          value: transformIdentifiers(prop.value, transform),
-        })),
-      };
+    case "ObjectExpr": {
+      const properties = mapObjectProperties(node.properties, (prop) => {
+        const key = prop.computed ? transformIdentifiers(prop.key, transform) : prop.key;
+        const value = transformIdentifiers(prop.value, transform);
+        return key === prop.key && value === prop.value ? prop : { ...prop, key, value };
+      });
+      return properties === node.properties ? node : { ...node, properties };
+    }
 
     case "ArrowFunctionExpr": {
       // 箭头函数：只转换 Identifier 参数名，Placeholder 参数保持不变
@@ -306,10 +303,8 @@ export function transformIdentifiers(node: ASTNode, transform: (name: string) =>
       const paramNames = new Set(
         node.params.filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier").map((p) => p.name)
       );
-      return {
-        ...node,
-        body: transformIdentifiers(node.body, (name) => (paramNames.has(name) ? name : transform(name))),
-      };
+      const body = transformIdentifiers(node.body, (name) => (paramNames.has(name) ? name : transform(name)));
+      return body === node.body ? node : { ...node, body };
     }
 
     default:
@@ -332,70 +327,107 @@ export function transformPlaceholders(node: ASTNode, transform: (id: symbol) => 
     case "Identifier":
       return node;
 
-    case "BinaryExpr":
-      return {
-        ...node,
-        left: transformPlaceholders(node.left, transform),
-        right: transformPlaceholders(node.right, transform),
-      };
+    case "BinaryExpr": {
+      const left = transformPlaceholders(node.left, transform);
+      const right = transformPlaceholders(node.right, transform);
+      return left === node.left && right === node.right ? node : { ...node, left, right };
+    }
 
-    case "UnaryExpr":
-      return {
-        ...node,
-        argument: transformPlaceholders(node.argument, transform),
-      };
+    case "UnaryExpr": {
+      const argument = transformPlaceholders(node.argument, transform);
+      return argument === node.argument ? node : { ...node, argument };
+    }
 
-    case "ConditionalExpr":
-      return {
-        ...node,
-        test: transformPlaceholders(node.test, transform),
-        consequent: transformPlaceholders(node.consequent, transform),
-        alternate: transformPlaceholders(node.alternate, transform),
-      };
+    case "ConditionalExpr": {
+      const test = transformPlaceholders(node.test, transform);
+      const consequent = transformPlaceholders(node.consequent, transform);
+      const alternate = transformPlaceholders(node.alternate, transform);
+      return test === node.test && consequent === node.consequent && alternate === node.alternate
+        ? node
+        : { ...node, test, consequent, alternate };
+    }
 
-    case "MemberExpr":
-      return {
-        ...node,
-        object: transformPlaceholders(node.object, transform),
-        property: node.computed ? transformPlaceholders(node.property, transform) : node.property,
-      };
+    case "MemberExpr": {
+      const object = transformPlaceholders(node.object, transform);
+      const property = node.computed ? transformPlaceholders(node.property, transform) : node.property;
+      return object === node.object && property === node.property ? node : { ...node, object, property };
+    }
 
-    case "CallExpr":
-      return {
-        ...node,
-        callee: transformPlaceholders(node.callee, transform),
-        arguments: node.arguments.map((arg) => transformPlaceholders(arg, transform)),
-      };
+    case "CallExpr": {
+      const callee = transformPlaceholders(node.callee, transform);
+      const arguments_ = mapAstNodes(node.arguments, (arg) => transformPlaceholders(arg, transform));
+      return callee === node.callee && arguments_ === node.arguments
+        ? node
+        : { ...node, callee, arguments: arguments_ };
+    }
 
-    case "ArrayExpr":
-      return {
-        ...node,
-        elements: node.elements.map((el) => transformPlaceholders(el, transform)),
-      };
+    case "ArrayExpr": {
+      const elements = mapAstNodes(node.elements, (el) => transformPlaceholders(el, transform));
+      return elements === node.elements ? node : { ...node, elements };
+    }
 
-    case "ObjectExpr":
-      return {
-        ...node,
-        properties: node.properties.map((prop) => ({
-          ...prop,
-          key: prop.computed ? transformPlaceholders(prop.key, transform) : prop.key,
-          value: transformPlaceholders(prop.value, transform),
-        })),
-      };
+    case "ObjectExpr": {
+      const properties = mapObjectProperties(node.properties, (prop) => {
+        const key = prop.computed ? transformPlaceholders(prop.key, transform) : prop.key;
+        const value = transformPlaceholders(prop.value, transform);
+        return key === prop.key && value === prop.value ? prop : { ...prop, key, value };
+      });
+      return properties === node.properties ? node : { ...node, properties };
+    }
 
     case "ArrowFunctionExpr": {
       // 箭头函数：参数保持不变（Placeholder 参数在代码生成时处理）
       // 函数体中的 Placeholder 需要转换，但要排除参数本身的 symbol
       const paramSymbols = new Set(node.params.filter((p) => p.type === "Placeholder").map((p) => p.id));
-      return {
-        ...node,
-        body: transformPlaceholders(node.body, (id) => (paramSymbols.has(id) ? null : transform(id))),
-      };
+      const body = transformPlaceholders(node.body, (id) => (paramSymbols.has(id) ? null : transform(id)));
+      return body === node.body ? node : { ...node, body };
     }
 
     default:
       return node;
   }
+}
+
+function mapAstNodes<T extends ASTNode>(nodes: T[], transform: (node: T) => T): T[] {
+  let result: T[] | undefined;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
+    const transformed = transform(node);
+
+    if (result) {
+      result.push(transformed);
+      continue;
+    }
+
+    if (transformed !== node) {
+      result = nodes.slice(0, i);
+      result.push(transformed);
+    }
+  }
+
+  return result ?? nodes;
+}
+
+function mapObjectProperties<T>(properties: T[], transform: (property: T) => T): T[] {
+  let result: T[] | undefined;
+
+  for (let i = 0; i < properties.length; i++) {
+    const property = properties[i]!;
+    const transformed = transform(property);
+
+    if (result) {
+      result.push(transformed);
+      continue;
+    }
+
+    if (transformed !== property) {
+      result = properties.slice(0, i);
+      result.push(transformed);
+    }
+  }
+
+  return result ?? properties;
 }
 
 /**
