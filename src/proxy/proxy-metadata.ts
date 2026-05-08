@@ -9,6 +9,7 @@ export interface ProxyMetadata {
   ast?: ASTNode; // 完整表达式 AST（expression 类型）
   rootVariable?: symbol; // 根 variable 的唯一标识
   dependencies?: Set<symbol>; // 依赖的所有 variable Symbol
+  deferredAsts?: Map<string, ASTNode>; // 因引用计数 >1 而未内联的子表达式 AST
 }
 
 /**

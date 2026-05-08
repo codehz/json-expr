@@ -1,4 +1,4 @@
-import { transformIdentifiers } from "../core/generate";
+import { countIdentifierReferences, transformIdentifiers } from "../core/generate";
 import { parse } from "../core/parser";
 import { getProxyMetadata } from "../proxy/proxy-metadata";
 import { createProxyExpressionWithAST } from "../proxy/proxy-variable";
@@ -94,6 +94,13 @@ export function expr<TContext extends Record<string, unknown>>(
     // 解析用户输入的字符串为 AST
     const ast = parse(source as string);
 
+    // 统计每个标识符的引用次数，用于决定是否内联
+    const refCounts = new Map<string, number>();
+    countIdentifierReferences(ast, refCounts);
+
+    // 收集推迟编译的子表达式 AST（因引用次数 > 1 而未内联）
+    const deferredAsts = new Map<string, ASTNode>();
+
     // 在 AST 级别进行标识符替换
     const transformedAst = transformIdentifiers(ast, (name): string | ASTNode => {
       // 检查是否是 context 中的变量
@@ -106,14 +113,23 @@ export function expr<TContext extends Record<string, unknown>>(
       // 检查是否是子表达式
       const exprAST = nameToExprAST.get(name);
       if (exprAST) {
-        // 返回 AST 节点以内联子表达式
-        return exprAST;
+        // 引用计数 > 1 则推迟编译，否则内联
+        const rc = refCounts.get(name) ?? 0;
+        if (rc <= 1) {
+          return exprAST;
+        }
+        deferredAsts.set(name, exprAST);
+        return name;
       }
 
       // 保持原样（可能是全局对象如 Math, JSON 等）
       return name;
     });
 
-    return createProxyExpressionWithAST<InferExpressionResult<TSource, TContext>>(transformedAst, deps);
+    return createProxyExpressionWithAST<InferExpressionResult<TSource, TContext>>(
+      transformedAst,
+      deps,
+      deferredAsts.size > 0 ? deferredAsts : undefined
+    );
   };
 }

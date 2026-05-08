@@ -291,13 +291,18 @@ export function createProxyVariable<T>(id: symbol): Proxify<T> {
  * @param deps - 依赖集合
  * @returns Proxy 包装的 Expression
  */
-export function createProxyExpressionWithAST<T>(ast: ASTNode, deps: Set<symbol>): Proxify<T> {
+export function createProxyExpressionWithAST<T>(
+  ast: ASTNode,
+  deps: Set<symbol>,
+  deferredAsts?: Map<string, ASTNode>
+): Proxify<T> {
   const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
 
   setProxyMetadata(proxy, {
     type: "expression",
     ast,
     dependencies: deps,
+    deferredAsts,
   });
 
   return proxy;

@@ -64,8 +64,8 @@ describe("compile 单元测试", () => {
     });
   });
 
-  describe("嵌套表达式内联", () => {
-    test("子表达式自动内联到结果中", () => {
+  describe("引用计数内联", () => {
+    test("单引用子表达式被内联", () => {
       const x = variable<number>();
       const y = variable<number>();
 
@@ -73,10 +73,22 @@ describe("compile 单元测试", () => {
       const product = expr({ x, y })("x * y");
       const result = expr({ sum, product })("sum + product");
 
-      // 新的 Proxy 系统自动内联所有子表达式
       const compiled = compile(result, { x, y });
       expect(compiled.length).toBe(2); // [变量名, 表达式]
       expect(compiled[0]).toEqual(["x", "y"]);
+    });
+
+    test("多引用子表达式推迟为独立编译", () => {
+      const x = variable<number>();
+
+      const base = expr({ x })("x + 1");
+      const result = expr({ base })("base * base");
+
+      const compiled = compile(result, { x });
+      expect(compiled.length).toBe(3); // [var, base编译, 结果编译]
+      expect(compiled[0]).toEqual(["x"]);
+      expect(compiled[1]).toBe("$[0]+1");
+      expect(compiled[2]).toBe("$[1]*$[1]");
     });
   });
 

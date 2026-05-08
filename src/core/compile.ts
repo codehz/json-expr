@@ -1,4 +1,5 @@
 import { getVariableId } from "../api/variable";
+import { getProxyMetadata } from "../proxy/proxy-metadata";
 import { serializeArgumentToAST } from "../proxy/proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, ExprValue, FnNode, JumpNode, PhiNode } from "../types";
 import type { ASTNode } from "../types/ast-types";
@@ -95,6 +96,13 @@ export function compile<TResult>(
   variables: Record<string, unknown>,
   _options: CompileOptions = {}
 ): CompiledData {
+  // 提取推迟编译的子表达式（因引用计数 >1 未内联）
+  let deferredAsts: Map<string, ASTNode> | undefined;
+  if ((typeof expression === "object" || typeof expression === "function") && expression !== null) {
+    const meta = getProxyMetadata(expression);
+    deferredAsts = meta?.deferredAsts;
+  }
+
   const ast = serializeArgumentToAST(expression);
 
   // 建立变量名到索引的映射
@@ -114,6 +122,21 @@ export function compile<TResult>(
     }
   }
 
+  // 生成编译后的表达式（短路求值总是启用）
+  const topLevelExprs: CompiledExpression[] = [];
+  const ctx: CompileCtx = {
+    nextParamIndex: 0,
+    expressionStack: [topLevelExprs],
+    nextIndex: variableOrder.length,
+    variableCount: variableOrder.length,
+  };
+
+  // 先编译所有 deferred 子表达式，获得其索引映射
+  const deferredIndexMap = new Map<string, number>();
+  if (deferredAsts && deferredAsts.size > 0) {
+    compileDeferredExprs(deferredAsts, ctx, symbolToName, variableToIndex, deferredIndexMap);
+  }
+
   // 转换 Placeholder 节点为 $[N] 格式的 Identifier
   const placeholderTransformed = transformPlaceholders(ast, (id) => {
     const name = symbolToName.get(id);
@@ -122,7 +145,7 @@ export function compile<TResult>(
     return index !== undefined ? `$[${index}]` : null;
   });
 
-  // 检查是否有未定义的 Identifier（非全局对象）
+  // 检查是否有未定义的 Identifier（非全局对象、非 deferred）
   const undefinedVars: string[] = [];
   const transformed = transformIdentifiers(placeholderTransformed, (name) => {
     // 已经转换为 $[N] 的跳过
@@ -134,6 +157,10 @@ export function compile<TResult>(
     const index = variableToIndex.get(name);
     if (index !== undefined) return `$[${index}]`;
 
+    // 检查是否是已编译的 deferred 名称
+    const deferredIdx = deferredIndexMap.get(name);
+    if (deferredIdx !== undefined) return `$[${deferredIdx}]`;
+
     if (!ALLOWED_GLOBALS.has(name)) undefinedVars.push(name);
     return name;
   });
@@ -141,15 +168,6 @@ export function compile<TResult>(
   if (undefinedVars.length > 0) {
     throw new Error(`Undefined variable(s): ${[...new Set(undefinedVars)].join(", ")}`);
   }
-
-  // 生成编译后的表达式（短路求值总是启用）
-  const topLevelExprs: CompiledExpression[] = [];
-  const ctx: CompileCtx = {
-    nextParamIndex: 0,
-    expressionStack: [topLevelExprs],
-    nextIndex: variableOrder.length,
-    variableCount: variableOrder.length,
-  };
 
   compileAst(transformed, ctx);
 
@@ -161,6 +179,75 @@ export function compile<TResult>(
  */
 function currentExprs(ctx: CompileCtx): CompiledExpression[] {
   return ctx.expressionStack[ctx.expressionStack.length - 1]!;
+}
+
+/**
+ * 编译推迟的子表达式（因引用计数 >1 未内联）
+ * 使用递归处理，自动按依赖拓扑顺序编译
+ */
+function compileDeferredExprs(
+  deferredAsts: Map<string, ASTNode>,
+  ctx: CompileCtx,
+  symbolToName: Map<symbol, string>,
+  variableToIndex: Map<string, number>,
+  deferredIndexMap: Map<string, number>
+): void {
+  const processing = new Set<string>();
+
+  function compileOne(name: string): number {
+    if (processing.has(name)) {
+      throw new Error(`Circular reference in deferred expressions: ${name}`);
+    }
+    const existing = deferredIndexMap.get(name);
+    if (existing !== undefined) return existing;
+
+    const ast = deferredAsts.get(name);
+    if (!ast) throw new Error(`Unknown deferred expression: ${name}`);
+
+    processing.add(name);
+
+    // 转换 Placeholder 节点为 $[N]
+    const t1 = transformPlaceholders(ast, (id) => {
+      const vName = symbolToName.get(id);
+      if (!vName) return null;
+      const idx = variableToIndex.get(vName);
+      return idx !== undefined ? `$[${idx}]` : null;
+    });
+
+    // 转换 Identifier 节点，同时递归编译依赖的 deferred 名称
+    const undefinedVars: string[] = [];
+    const t2 = transformIdentifiers(t1, (n) => {
+      if (/^\$\[\d+\]$/.test(n)) return n;
+      if (/^_\d+$/.test(n)) return n;
+
+      const varIdx = variableToIndex.get(n);
+      if (varIdx !== undefined) return `$[${varIdx}]`;
+
+      // 检查是否是另一个 deferred 名称（递归编译）
+      if (deferredAsts.has(n)) {
+        const dIdx = compileOne(n);
+        return `$[${dIdx}]`;
+      }
+
+      if (!ALLOWED_GLOBALS.has(n)) undefinedVars.push(n);
+      return n;
+    });
+
+    if (undefinedVars.length > 0) {
+      throw new Error(
+        `Undefined variable(s) in deferred expression "${name}": ${[...new Set(undefinedVars)].join(", ")}`
+      );
+    }
+
+    const idx = compileAst(t2, ctx);
+    deferredIndexMap.set(name, idx);
+    processing.delete(name);
+    return idx;
+  }
+
+  for (const name of deferredAsts.keys()) {
+    compileOne(name);
+  }
 }
 
 /**

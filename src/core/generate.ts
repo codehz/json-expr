@@ -399,6 +399,75 @@ export function transformPlaceholders(node: ASTNode, transform: (id: symbol) => 
 }
 
 /**
+ * 统计 AST 中各标识符名称的出现次数
+ * 用于判断子表达式是否应该内联（引用次数 = 1 则内联，> 1 则推迟为独立编译）
+ */
+export function countIdentifierReferences(node: ASTNode, counts: Map<string, number>): void {
+  switch (node.type) {
+    case "Identifier":
+      counts.set(node.name, (counts.get(node.name) ?? 0) + 1);
+      break;
+
+    case "Placeholder":
+      break;
+
+    case "BinaryExpr":
+      countIdentifierReferences(node.left, counts);
+      countIdentifierReferences(node.right, counts);
+      break;
+
+    case "UnaryExpr":
+      countIdentifierReferences(node.argument, counts);
+      break;
+
+    case "ConditionalExpr":
+      countIdentifierReferences(node.test, counts);
+      countIdentifierReferences(node.consequent, counts);
+      countIdentifierReferences(node.alternate, counts);
+      break;
+
+    case "MemberExpr":
+      countIdentifierReferences(node.object, counts);
+      if (node.computed) countIdentifierReferences(node.property, counts);
+      break;
+
+    case "CallExpr":
+      countIdentifierReferences(node.callee, counts);
+      for (const arg of node.arguments) countIdentifierReferences(arg, counts);
+      break;
+
+    case "ArrayExpr":
+      for (const el of node.elements) countIdentifierReferences(el, counts);
+      break;
+
+    case "ObjectExpr":
+      for (const prop of node.properties) {
+        if (prop.computed) countIdentifierReferences(prop.key, counts);
+        countIdentifierReferences(prop.value, counts);
+      }
+      break;
+
+    case "ArrowFunctionExpr":
+      // 函数体内的标识符计数：排除参数名
+      {
+        const paramNames = new Set(
+          node.params
+            .filter((p): p is { type: "Identifier"; name: string } => p.type === "Identifier")
+            .map((p) => p.name)
+        );
+        const bodyCounts = new Map<string, number>();
+        countIdentifierReferences(node.body, bodyCounts);
+        for (const [name, count] of bodyCounts) {
+          if (!paramNames.has(name)) {
+            counts.set(name, (counts.get(name) ?? 0) + count);
+          }
+        }
+      }
+      break;
+  }
+}
+
+/**
  * 收集 AST 中所有使用的标识符名称（自由变量）
  */
 export function collectIdentifiers(node: ASTNode): Set<string> {
