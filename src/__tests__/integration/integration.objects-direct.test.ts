@@ -23,4 +23,21 @@ describe("对象/数组直接编译集成测试", () => {
 
     expect(output).toEqual([5, 10, 100]);
   });
+
+  test("编译并求值包含 deferred Proxy 的嵌套对象/数组", () => {
+    const input = variable<{ fallbackTargetX: number }>();
+    const testExpr = expr({
+      fallbackTargetX: input.fallbackTargetX,
+    })("fallbackTargetX >= 0 ? fallbackTargetX : -1");
+
+    const output = compileAndEvaluate<{ a: { testExpr: number }[] }>(
+      { a: [{ testExpr }] },
+      { input },
+      { input: { fallbackTargetX: 6 } }
+    );
+
+    expect(output).toEqual({
+      a: [{ testExpr: 6 }],
+    });
+  });
 });

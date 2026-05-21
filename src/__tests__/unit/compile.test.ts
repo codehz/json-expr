@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compile, expr, variable } from "../../index";
+import { compile, evaluate, expr, variable } from "../../index";
 
 describe("compile 单元测试", () => {
   describe("编译输出格式", () => {
@@ -129,12 +129,69 @@ describe("compile 单元测试", () => {
       expect(result[1]).toBe("{sum:$[0]+$[1],x:$[0],constant:1}");
     });
 
+    test("支持对象中包含带 deferred 子表达式的 Proxy", () => {
+      const input = variable<{ fallbackTargetX: number }>();
+      const testExpr = expr({
+        fallbackTargetX: input.fallbackTargetX,
+      })("fallbackTargetX >= 0 ? fallbackTargetX : -1");
+
+      const compiled = compile({ testExpr }, { input });
+
+      expect(compiled[0]).toEqual(["input"]);
+      expect(evaluate<{ testExpr: number }>(compiled, { input: { fallbackTargetX: 3 } })).toEqual({ testExpr: 3 });
+      expect(evaluate<{ testExpr: number }>(compiled, { input: { fallbackTargetX: -2 } })).toEqual({ testExpr: -1 });
+    });
+
     test("支持数组中包含 Proxy", () => {
       const x = variable<number[]>();
       const result = compile([x, x.at(0), 42], { x });
 
       expect(result[0]).toEqual(["x"]);
       expect(result[1]).toBe("[$[0],$[0].at(0),42]");
+    });
+
+    test("支持数组中包含带 deferred 子表达式的 Proxy", () => {
+      const input = variable<{ fallbackTargetX: number }>();
+      const testExpr = expr({
+        fallbackTargetX: input.fallbackTargetX,
+      })("fallbackTargetX >= 0 ? fallbackTargetX : -1");
+
+      const compiled = compile([{ testExpr }], { input });
+
+      expect(evaluate<[{ testExpr: number }]>(compiled, { input: { fallbackTargetX: 4 } })).toEqual([{ testExpr: 4 }]);
+      expect(evaluate<[{ testExpr: number }]>(compiled, { input: { fallbackTargetX: -4 } })).toEqual([
+        { testExpr: -1 },
+      ]);
+    });
+
+    test("支持深层嵌套对象/数组中包含带 deferred 子表达式的 Proxy", () => {
+      const input = variable<{ fallbackTargetX: number }>();
+      const testExpr = expr({
+        fallbackTargetX: input.fallbackTargetX,
+      })("fallbackTargetX >= 0 ? fallbackTargetX : -1");
+
+      const compiled = compile({ a: [testExpr] }, { input });
+
+      expect(evaluate<{ a: number[] }>(compiled, { input: { fallbackTargetX: 8 } })).toEqual({ a: [8] });
+      expect(evaluate<{ a: number[] }>(compiled, { input: { fallbackTargetX: -8 } })).toEqual({ a: [-1] });
+    });
+
+    test("支持多个嵌套 Proxy 的 deferred 名称隔离", () => {
+      const left = variable<number>();
+      const right = variable<number>();
+
+      const leftBase = expr({ left })("left + 1");
+      const leftExpr = expr({ base: leftBase })("base * base");
+
+      const rightBase = expr({ right })("right + 2");
+      const rightExpr = expr({ base: rightBase })("base * base");
+
+      const compiled = compile({ leftExpr, rightExpr }, { left, right });
+
+      expect(evaluate<{ leftExpr: number; rightExpr: number }>(compiled, { left: 2, right: 3 })).toEqual({
+        leftExpr: 9,
+        rightExpr: 25,
+      });
     });
 
     test("支持直接传入 root variable", () => {

@@ -3,7 +3,7 @@ import { getProxyMetadata } from "../proxy/proxy-metadata";
 import { serializeArgumentToAST } from "../proxy/proxy-variable";
 import type { BranchNode, CompiledData, CompiledExpression, ExprValue, FnNode, JumpNode, PhiNode } from "../types";
 import type { ASTNode } from "../types/ast-types";
-import { generate } from "./generate";
+import { generate, transformIdentifiers } from "./generate";
 
 const ALLOWED_GLOBALS = new Set([
   "Math",
@@ -81,6 +81,16 @@ interface CompileCtx {
   baseScope: RewriteScope;
 }
 
+interface NormalizedCompileInput {
+  ast: ASTNode;
+  deferredAsts?: Map<string, ASTNode>;
+}
+
+interface NormalizeState {
+  deferredAsts: Map<string, ASTNode>;
+  nextDeferredGroup: number;
+}
+
 /**
  * 将 Proxy Expression 编译为可序列化的 JSON 结构
  *
@@ -107,14 +117,7 @@ export function compile<TResult>(
   variables: Record<string, unknown>,
   _options: CompileOptions = {}
 ): CompiledData {
-  // 提取推迟编译的子表达式（因引用计数 >1 未内联）
-  let deferredAsts: Map<string, ASTNode> | undefined;
-  if ((typeof expression === "object" || typeof expression === "function") && expression !== null) {
-    const meta = getProxyMetadata(expression);
-    deferredAsts = meta?.deferredAsts;
-  }
-
-  const ast = serializeArgumentToAST(expression);
+  const { ast, deferredAsts } = normalizeCompileInput(expression);
 
   // 建立变量名到索引的映射
   const variableOrder: string[] = [];
@@ -166,6 +169,138 @@ export function compile<TResult>(
   compileAst(transformed, ctx, baseScope);
 
   return [variableOrder, ...topLevelExprs];
+}
+
+function normalizeCompileInput(expression: unknown): NormalizedCompileInput {
+  const state: NormalizeState = {
+    deferredAsts: new Map<string, ASTNode>(),
+    nextDeferredGroup: 0,
+  };
+
+  const ast = normalizeCompileValueToAST(expression, state);
+  return {
+    ast,
+    deferredAsts: state.deferredAsts.size > 0 ? state.deferredAsts : undefined,
+  };
+}
+
+function normalizeCompileValueToAST(value: unknown, state: NormalizeState): ASTNode {
+  if ((typeof value === "object" || typeof value === "function") && value !== null) {
+    const meta = getProxyMetadata(value);
+    if (meta) {
+      if (meta.ast) {
+        if (meta.deferredAsts && meta.deferredAsts.size > 0) {
+          const renamed = renameDeferredExpressions(meta.ast, meta.deferredAsts, state.nextDeferredGroup++);
+          for (const [name, ast] of renamed.deferredAsts) {
+            state.deferredAsts.set(name, ast);
+          }
+          return renamed.ast;
+        }
+        return meta.ast;
+      }
+
+      if (meta.rootVariable) {
+        return { type: "Placeholder", id: meta.rootVariable };
+      }
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return {
+      type: "ArrayExpr",
+      elements: value.map((item) => normalizeCompileValueToAST(item, state)),
+    };
+  }
+
+  if (value instanceof Map) {
+    return {
+      type: "CallExpr",
+      callee: { type: "Identifier", name: "Map" },
+      arguments: [
+        {
+          type: "ArrayExpr",
+          elements: Array.from(value, ([key, entryValue]) => ({
+            type: "ArrayExpr",
+            elements: [normalizeCompileValueToAST(key, state), normalizeCompileValueToAST(entryValue, state)],
+          })),
+        },
+      ],
+      optional: false,
+    };
+  }
+
+  if (value instanceof Set) {
+    return {
+      type: "CallExpr",
+      callee: { type: "Identifier", name: "Set" },
+      arguments: [
+        {
+          type: "ArrayExpr",
+          elements: Array.from(value, (item) => normalizeCompileValueToAST(item, state)),
+        },
+      ],
+      optional: false,
+    };
+  }
+
+  if (isRecursivelySerializableObject(value)) {
+    return {
+      type: "ObjectExpr",
+      properties: Object.entries(value).map(([key, entryValue]) => ({
+        key: /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)
+          ? ({ type: "Identifier", name: key } as const)
+          : ({ type: "StringLiteral", value: key, quote: '"' } as const),
+        value: normalizeCompileValueToAST(entryValue, state),
+        computed: false,
+        shorthand: false,
+      })),
+    };
+  }
+
+  return serializeArgumentToAST(value);
+}
+
+function isRecursivelySerializableObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  if (
+    value instanceof Date ||
+    value instanceof RegExp ||
+    (typeof URL !== "undefined" && value instanceof URL) ||
+    (typeof URLSearchParams !== "undefined" && value instanceof URLSearchParams) ||
+    value instanceof ArrayBuffer ||
+    value instanceof DataView ||
+    ArrayBuffer.isView(value)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function renameDeferredExpressions(
+  ast: ASTNode,
+  deferredAsts: ReadonlyMap<string, ASTNode>,
+  groupIndex: number
+): NormalizedCompileInput {
+  const renamedNames = new Map<string, string>();
+  for (const name of deferredAsts.keys()) {
+    renamedNames.set(name, `__deferred_${groupIndex}_${name}`);
+  }
+
+  const renameNode = (node: ASTNode): ASTNode => transformIdentifiers(node, (name) => renamedNames.get(name) ?? name);
+
+  const renamedDeferredAsts = new Map<string, ASTNode>();
+  for (const [name, deferredAst] of deferredAsts) {
+    renamedDeferredAsts.set(renamedNames.get(name)!, renameNode(deferredAst));
+  }
+
+  return {
+    ast: renameNode(ast),
+    deferredAsts: renamedDeferredAsts,
+  };
 }
 
 /**
