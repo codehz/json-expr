@@ -91,6 +91,212 @@ function arrayExpr(elements: ASTNode[]): ArrayExpr {
   return { type: "ArrayExpr", elements };
 }
 
+interface SerializedArgument {
+  ast: ASTNode;
+  deps: Set<symbol>;
+  deferredAsts?: Map<string, ASTNode>;
+}
+
+interface SerializeState {
+  deferredAsts: Map<string, ASTNode>;
+}
+
+function createSerializeState(): SerializeState {
+  return {
+    deferredAsts: new Map<string, ASTNode>(),
+  };
+}
+
+function mergeDeferredAsts(target: Map<string, ASTNode>, source?: ReadonlyMap<string, ASTNode>): void {
+  if (!source) return;
+  for (const [name, ast] of source) {
+    target.set(name, ast);
+  }
+}
+
+function serializeArgumentToASTInternal(arg: unknown, state: SerializeState): SerializedArgument {
+  if ((typeof arg === "object" || typeof arg === "function") && arg !== null) {
+    const meta = getProxyMetadata(arg);
+    if (meta) {
+      const deps = new Set(meta.dependencies ?? []);
+      const deferredAsts = meta.deferredAsts ? new Map(meta.deferredAsts) : undefined;
+
+      if (meta.ast) {
+        if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+        return {
+          ast: meta.ast,
+          deps,
+          deferredAsts,
+        };
+      }
+
+      if (meta.rootVariable) {
+        if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+        return {
+          ast: placeholder(meta.rootVariable),
+          deps,
+          deferredAsts,
+        };
+      }
+    }
+  }
+
+  if (Array.isArray(arg)) {
+    const elements: ASTNode[] = [];
+    const deps = new Set<symbol>();
+    let deferredAsts: Map<string, ASTNode> | undefined;
+
+    for (const item of arg) {
+      const serialized = serializeArgumentToASTInternal(item, state);
+      elements.push(serialized.ast);
+      for (const dep of serialized.deps) deps.add(dep);
+      if (serialized.deferredAsts) {
+        if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+        mergeDeferredAsts(deferredAsts, serialized.deferredAsts);
+      }
+    }
+
+    return {
+      ast: arrayExpr(elements),
+      deps,
+      deferredAsts,
+    };
+  }
+
+  if (typeof arg === "object" && arg !== null) {
+    if (arg instanceof Date) {
+      return { ast: callExpr(identifier("Date"), [numberLiteral(arg.getTime())]), deps: new Set<symbol>() };
+    }
+
+    if (arg instanceof RegExp) {
+      const args = [stringLiteral(arg.source)];
+      if (arg.flags) args.push(stringLiteral(arg.flags));
+      return { ast: callExpr(identifier("RegExp"), args), deps: new Set<symbol>() };
+    }
+
+    if (typeof URL !== "undefined" && arg instanceof URL) {
+      return { ast: callExpr(identifier("URL"), [stringLiteral(arg.href)]), deps: new Set<symbol>() };
+    }
+
+    if (typeof URLSearchParams !== "undefined" && arg instanceof URLSearchParams) {
+      const entries: ASTNode[] = [];
+      arg.forEach((value, key) => {
+        entries.push(arrayExpr([stringLiteral(key), stringLiteral(value)]));
+      });
+      return {
+        ast: callExpr(identifier("URLSearchParams"), [arrayExpr(entries)]),
+        deps: new Set<symbol>(),
+      };
+    }
+
+    if (arg instanceof Map) {
+      const entries: ASTNode[] = [];
+      const deps = new Set<symbol>();
+      let deferredAsts: Map<string, ASTNode> | undefined;
+      for (const [key, value] of arg) {
+        const serializedKey = serializeArgumentToASTInternal(key, state);
+        const serializedValue = serializeArgumentToASTInternal(value, state);
+        entries.push(arrayExpr([serializedKey.ast, serializedValue.ast]));
+        for (const dep of serializedKey.deps) deps.add(dep);
+        for (const dep of serializedValue.deps) deps.add(dep);
+        if (serializedKey.deferredAsts) {
+          if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+          mergeDeferredAsts(deferredAsts, serializedKey.deferredAsts);
+        }
+        if (serializedValue.deferredAsts) {
+          if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+          mergeDeferredAsts(deferredAsts, serializedValue.deferredAsts);
+        }
+      }
+      if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+      return { ast: callExpr(identifier("Map"), [arrayExpr(entries)]), deps, deferredAsts };
+    }
+
+    if (arg instanceof Set) {
+      const values: ASTNode[] = [];
+      const deps = new Set<symbol>();
+      let deferredAsts: Map<string, ASTNode> | undefined;
+      for (const value of arg) {
+        const serialized = serializeArgumentToASTInternal(value, state);
+        values.push(serialized.ast);
+        for (const dep of serialized.deps) deps.add(dep);
+        if (serialized.deferredAsts) {
+          if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+          mergeDeferredAsts(deferredAsts, serialized.deferredAsts);
+        }
+      }
+      if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+      return { ast: callExpr(identifier("Set"), [arrayExpr(values)]), deps, deferredAsts };
+    }
+
+    const typedArrayConstructor = getTypedArrayConstructor(arg);
+    if (typedArrayConstructor) {
+      const values: ASTNode[] = [];
+      const deps = new Set<symbol>();
+      let deferredAsts: Map<string, ASTNode> | undefined;
+      for (const value of arg as Iterable<unknown>) {
+        const serialized = serializeArgumentToASTInternal(value, state);
+        values.push(serialized.ast);
+        for (const dep of serialized.deps) deps.add(dep);
+        if (serialized.deferredAsts) {
+          if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+          mergeDeferredAsts(deferredAsts, serialized.deferredAsts);
+        }
+      }
+      if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+      return {
+        ast: callExpr(identifier(typedArrayConstructor.name), [arrayExpr(values)]),
+        deps,
+        deferredAsts,
+      };
+    }
+
+    if (arg instanceof ArrayBuffer) {
+      const uint8Array = new Uint8Array(arg);
+      const values = Array.from(uint8Array).map(numberLiteral);
+      return {
+        ast: memberExpr(callExpr(identifier("Uint8Array"), [arrayExpr(values)]), identifier("buffer")),
+        deps: new Set<symbol>(),
+      };
+    }
+
+    if (arg instanceof DataView) {
+      return {
+        ast: callExpr(identifier("DataView"), [serializeArgumentToASTInternal(arg.buffer, state).ast]),
+        deps: new Set<symbol>(),
+      };
+    }
+
+    const deps = new Set<symbol>();
+    let deferredAsts: Map<string, ASTNode> | undefined;
+    const properties = Object.entries(arg).map(([k, v]) => {
+      const serialized = serializeArgumentToASTInternal(v, state);
+      for (const dep of serialized.deps) deps.add(dep);
+      if (serialized.deferredAsts) {
+        if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+        mergeDeferredAsts(deferredAsts, serialized.deferredAsts);
+      }
+      const isValidIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k);
+      const key: ASTNode = isValidIdentifier ? identifier(k) : stringLiteral(k);
+      return { key, value: serialized.ast, computed: false, shorthand: false };
+    });
+
+    if (deferredAsts) mergeDeferredAsts(state.deferredAsts, deferredAsts);
+    return { ast: { type: "ObjectExpr", properties }, deps, deferredAsts };
+  }
+
+  if (arg === null) return { ast: { type: "NullLiteral" }, deps: new Set<symbol>() };
+  if (arg === undefined) return { ast: identifier("undefined"), deps: new Set<symbol>() };
+  if (typeof arg === "boolean") return { ast: { type: "BooleanLiteral", value: arg }, deps: new Set<symbol>() };
+  if (typeof arg === "number") return { ast: numberLiteral(arg), deps: new Set<symbol>() };
+  if (typeof arg === "string") return { ast: stringLiteral(arg), deps: new Set<symbol>() };
+  if (typeof arg === "bigint") {
+    return { ast: callExpr(identifier("BigInt"), [stringLiteral(arg.toString())]), deps: new Set<symbol>() };
+  }
+
+  throw new Error(`Unsupported argument type: ${typeof arg}`);
+}
+
 /**
  * 检查对象是否为 TypedArray 实例
  */
@@ -113,107 +319,11 @@ function getTypedArrayConstructor(value: unknown): TypedArrayConstructor | null 
  * - Date, RegExp, BigInt, URL, URLSearchParams, Map, Set, TypedArray, DataView: 构造函数调用
  */
 export function serializeArgumentToAST(arg: unknown): ASTNode {
-  // 1. 检查是否是 Proxy (通过 getProxyMetadata)
-  // 注意：Proxy 包装的是函数，所以 typeof 可能是 "function" 或 "object"
-  if ((typeof arg === "object" || typeof arg === "function") && arg !== null) {
-    const meta = getProxyMetadata(arg);
-    if (meta) {
-      // 如果有 ast，直接返回
-      if (meta.ast) return meta.ast;
-      // 否则是根 variable，返回占位符节点
-      if (meta.rootVariable) {
-        return placeholder(meta.rootVariable);
-      }
-    }
-  }
+  return serializeArgumentToASTInternal(arg, createSerializeState()).ast;
+}
 
-  // 2. 数组递归处理
-  if (Array.isArray(arg)) {
-    return arrayExpr(arg.map(serializeArgumentToAST));
-  }
-
-  // 3. 特殊内置对象类型
-  if (typeof arg === "object" && arg !== null) {
-    // Date: new Date(timestamp)
-    if (arg instanceof Date) {
-      return callExpr(identifier("Date"), [numberLiteral(arg.getTime())]);
-    }
-
-    // RegExp: new RegExp(source, flags)
-    if (arg instanceof RegExp) {
-      const args = [stringLiteral(arg.source)];
-      if (arg.flags) args.push(stringLiteral(arg.flags));
-      return callExpr(identifier("RegExp"), args);
-    }
-
-    // URL: new URL(href)
-    if (typeof URL !== "undefined" && arg instanceof URL) {
-      return callExpr(identifier("URL"), [stringLiteral(arg.href)]);
-    }
-
-    // URLSearchParams: new URLSearchParams(entries)
-    if (typeof URLSearchParams !== "undefined" && arg instanceof URLSearchParams) {
-      const entries: ASTNode[] = [];
-      arg.forEach((value, key) => {
-        entries.push(arrayExpr([stringLiteral(key), stringLiteral(value)]));
-      });
-      return callExpr(identifier("URLSearchParams"), [arrayExpr(entries)]);
-    }
-
-    // Map: new Map(entries)
-    if (arg instanceof Map) {
-      const entries: ASTNode[] = [];
-      arg.forEach((value, key) => {
-        entries.push(arrayExpr([serializeArgumentToAST(key), serializeArgumentToAST(value)]));
-      });
-      return callExpr(identifier("Map"), [arrayExpr(entries)]);
-    }
-
-    // Set: new Set(values)
-    if (arg instanceof Set) {
-      const values: ASTNode[] = [];
-      arg.forEach((value) => values.push(serializeArgumentToAST(value)));
-      return callExpr(identifier("Set"), [arrayExpr(values)]);
-    }
-
-    // TypedArray: new Uint8Array([...])
-    const typedArrayConstructor = getTypedArrayConstructor(arg);
-    if (typedArrayConstructor) {
-      const values = [...(arg as Iterable<unknown>)].map(serializeArgumentToAST);
-      const constructorName = typedArrayConstructor.name;
-      return callExpr(identifier(constructorName), [arrayExpr(values)]);
-    }
-
-    // ArrayBuffer: new Uint8Array([...]).buffer
-    if (arg instanceof ArrayBuffer) {
-      const uint8Array = new Uint8Array(arg);
-      const values = Array.from(uint8Array).map(numberLiteral);
-      return memberExpr(callExpr(identifier("Uint8Array"), [arrayExpr(values)]), identifier("buffer"));
-    }
-
-    // DataView: new DataView(buffer)
-    if (arg instanceof DataView) {
-      return callExpr(identifier("DataView"), [serializeArgumentToAST(arg.buffer)]);
-    }
-
-    // 普通对象递归处理
-    const properties = Object.entries(arg).map(([k, v]) => {
-      const isValidIdentifier = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k);
-      const key: ASTNode = isValidIdentifier ? identifier(k) : stringLiteral(k);
-      return { key, value: serializeArgumentToAST(v), computed: false, shorthand: false };
-    });
-    return { type: "ObjectExpr", properties };
-  }
-
-  // 4. 原始值
-  if (arg === null) return { type: "NullLiteral" };
-  if (arg === undefined) return identifier("undefined");
-  if (typeof arg === "boolean") return { type: "BooleanLiteral", value: arg };
-  if (typeof arg === "number") return numberLiteral(arg);
-  if (typeof arg === "string") return stringLiteral(arg);
-  if (typeof arg === "bigint") return callExpr(identifier("BigInt"), [stringLiteral(arg.toString())]);
-
-  throw new Error(`Unsupported argument type: ${typeof arg}`);
+export function serializeArgumentToASTWithMetadata(arg: unknown): SerializedArgument {
+  return serializeArgumentToASTInternal(arg, createSerializeState());
 }
 
 /**
@@ -241,18 +351,34 @@ export function collectDepsFromArgs(args: unknown[], deps: Set<symbol>): void {
 /**
  * 创建 Proxy 的公共 handler
  */
-function createProxyHandler<T>(ast: ASTNode, deps: Set<symbol>): ProxyHandler<Proxify<T>> {
+function createProxyHandler<T>(
+  ast: ASTNode,
+  deps: Set<symbol>,
+  deferredAsts?: Map<string, ASTNode>
+): ProxyHandler<Proxify<T>> {
   return {
     get(_target, prop) {
       if (typeof prop === "symbol") return undefined;
       const newAst = memberExpr(ast, identifier(String(prop)));
-      return createProxyExpressionWithAST<unknown>(newAst, deps);
+      return createProxyExpressionWithAST<unknown>(newAst, deps, deferredAsts);
     },
     apply(_target, _thisArg, args) {
-      const callAst = callExpr(ast, args.map(serializeArgumentToAST));
+      const serializedArgs = args.map((arg) => serializeArgumentToASTWithMetadata(arg));
+      const callAst = callExpr(
+        ast,
+        serializedArgs.map((item) => item.ast)
+      );
       const newDeps = new Set(deps);
+      let deferredAsts: Map<string, ASTNode> | undefined;
+      for (const item of serializedArgs) {
+        for (const dep of item.deps) newDeps.add(dep);
+        if (item.deferredAsts) {
+          if (!deferredAsts) deferredAsts = new Map<string, ASTNode>();
+          mergeDeferredAsts(deferredAsts, item.deferredAsts);
+        }
+      }
       collectDepsFromArgs(args, newDeps);
-      return createProxyExpressionWithAST<T>(callAst, newDeps);
+      return createProxyExpressionWithAST<T>(callAst, newDeps, deferredAsts);
     },
   };
 }
@@ -293,7 +419,7 @@ export function createProxyExpressionWithAST<T>(
   deps: Set<symbol>,
   deferredAsts?: Map<string, ASTNode>
 ): Proxify<T> {
-  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps));
+  const proxy = new Proxy(function () {} as unknown as Proxify<T>, createProxyHandler<T>(ast, deps, deferredAsts));
 
   setProxyMetadata(proxy, {
     type: "expression",

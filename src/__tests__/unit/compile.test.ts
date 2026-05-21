@@ -142,6 +142,18 @@ describe("compile 单元测试", () => {
       expect(evaluate<{ testExpr: number }>(compiled, { input: { fallbackTargetX: -2 } })).toEqual({ testExpr: -1 });
     });
 
+    test("支持函数参数中包含带 deferred 子表达式的 Proxy", () => {
+      const input = variable<{ x: number }>();
+      const fn = variable<(p: { content: number }) => number>();
+      const repeated = expr({ x: input.x })("x + x");
+
+      const compiled = compile(fn({ content: repeated }), { input, fn });
+
+      expect(compiled[0]).toEqual(["input", "fn"]);
+      expect(compiled[1]).toBe("$[0].x");
+      expect(compiled[2]).toBe("$[1]({content:$[2]+$[2]})");
+    });
+
     test("支持数组中包含 Proxy", () => {
       const x = variable<number[]>();
       const result = compile([x, x.at(0), 42], { x });
