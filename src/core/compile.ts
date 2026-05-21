@@ -191,7 +191,7 @@ function normalizeCompileValueToAST(value: unknown, state: NormalizeState): ASTN
       if (meta.ast) {
         if (meta.deferredAsts && meta.deferredAsts.size > 0) {
           const renamed = renameDeferredExpressions(meta.ast, meta.deferredAsts, state.nextDeferredGroup++);
-          for (const [name, ast] of renamed.deferredAsts) {
+          for (const [name, ast] of renamed.deferredAsts!) {
             state.deferredAsts.set(name, ast);
           }
           return renamed.ast;
